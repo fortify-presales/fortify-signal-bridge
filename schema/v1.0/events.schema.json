@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.collector/1.0/events.schema.json",
+  "title": "fortify.collector 1.0 events collection",
+  "description": "Produced by the findings (issue_history), scans (scan_lifecycle) and event log (tenant_eventlog) collectors. Dedupe key: event_key.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "event_sources",
+    "events"
+  ],
+  "properties": {
+    "collection_type": {
+      "const": "events"
+    },
+    "event_sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/eventSource"
+      },
+      "minItems": 1
+    },
+    "source_columns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "tenant_eventlog only: CSV header as returned by FoD."
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    }
+  },
+  "$defs": {
+    "eventSource": {
+      "enum": [
+        "issue_history",
+        "scan_lifecycle",
+        "tenant_eventlog"
+      ]
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "event_key",
+        "event_source",
+        "event_type",
+        "occurred_at",
+        "actor",
+        "application_id",
+        "application_name",
+        "release_id",
+        "release_name",
+        "scan_id",
+        "source_finding_id",
+        "instance_id",
+        "message",
+        "details"
+      ],
+      "properties": {
+        "event_key": {
+          "type": "string",
+          "description": "Deterministic key; identical events from overlapping windows share the same key."
+        },
+        "event_source": {
+          "$ref": "#/$defs/eventSource"
+        },
+        "event_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "scan_lifecycle: scan_started, scan_completed, scan_cancelled, scan_paused. issue_history: FoD historyType. tenant_eventlog: FoD event type text."
+        },
+        "occurred_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Timestamp as reported by FoD; time zone is not always included."
+        },
+        "actor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "application_id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "application_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "release_id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "release_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scan_id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_finding_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instance_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "details": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "event_source": {
+                "const": "issue_history"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "source_finding_id": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "category",
+                  "severity",
+                  "source_scan_type"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_source": {
+                "const": "scan_lifecycle"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "event_type": {
+                "enum": [
+                  "scan_started",
+                  "scan_completed",
+                  "scan_cancelled",
+                  "scan_paused"
+                ]
+              },
+              "scan_id": {
+                "type": "integer"
+              },
+              "details": {
+                "type": "object",
+                "required": [
+                  "scan_type",
+                  "assessment_type",
+                  "analysis_status"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "event_source": {
+                "const": "tenant_eventlog"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "details": {
+                "type": "object",
+                "required": [
+                  "raw"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

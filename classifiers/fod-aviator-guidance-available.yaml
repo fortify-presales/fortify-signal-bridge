@@ -1,0 +1,8 @@
+# Diagnostic: Aviator remediation guidance exists, regardless of audit disposition.
+id: fod-aviator-guidance-available
+version: 1
+title: Aviator remediation guidance available
+scan_types: []
+issue_query: aviatorRemediationGuidanceAvailable == true
+application_query: >-
+  businessCriticalityType == 'High'

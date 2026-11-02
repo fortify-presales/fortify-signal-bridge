@@ -1,0 +1,13 @@
+# Aviator audited a SAST finding as requiring remediation in an AI application.
+# fortifyAviator=true is audit evidence only; it does not mean a fix was applied.
+id: fod-aviator-sast-true-positive
+version: 1
+title: Aviator-confirmed SAST finding requiring remediation (AI application)
+scan_types: [Static]
+issue_query: >-
+  fortifyAviator == true
+  && {'Remediation Required','Required Remediation'}.contains(auditorStatus)
+#  && (checkId == null || !(checkId.startsWith('agentic/') || checkId.startsWith('prompt-injection/')))
+application_query: >-
+  businessCriticalityType == 'High'
+#  && attributes.?[name == 'AI Application Type' && {'LLM Application','AI Agent'}.contains(value)].size() == 1

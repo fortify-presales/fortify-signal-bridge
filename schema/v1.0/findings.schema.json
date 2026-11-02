@@ -1,0 +1,456 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.collector/1.0/findings.schema.json",
+  "title": "fortify.collector 1.0 findings collection",
+  "description": "Produced by actions/fod-export-findings.fcli (--file). Dedupe key: (release_id, source_finding_id).",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "classification",
+    "scan_type",
+    "severities",
+    "modified_since",
+    "scope",
+    "profile",
+    "profile_version",
+    "findings"
+  ],
+  "properties": {
+    "collection_type": {
+      "const": "findings"
+    },
+    "producer": {
+      "properties": {
+        "collector_id": {
+          "const": "fortify.fod.findings"
+        }
+      }
+    },
+    "scan_type": {
+      "type": "string"
+    },
+    "severities": {
+      "type": "array",
+      "items": {
+        "$ref": "envelope.schema.json#/$defs/severity"
+      },
+      "description": "Empty means all severities."
+    },
+    "modified_since": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9]{4}/[0-9]{2}/[0-9]{2}$"
+    },
+    "scope": {
+      "description": "Set only when a single release was requested; null for tenant-wide collections (use per-finding scope fields).",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "application_id",
+            "application_name",
+            "ai_application_type",
+            "release_id",
+            "release_name"
+          ],
+          "properties": {
+            "application_id": {
+              "type": "integer"
+            },
+            "application_name": {
+              "type": "string"
+            },
+            "ai_application_type": {
+              "$ref": "envelope.schema.json#/$defs/aiApplicationType"
+            },
+            "release_id": {
+              "type": "integer"
+            },
+            "release_name": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "profile": {
+      "const": "all-findings"
+    },
+    "profile_version": {
+      "const": "1"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "classification": {
+      "type": "object",
+      "required": [
+        "mode",
+        "classifiers",
+        "matched_count"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "tag",
+            "filter"
+          ],
+          "description": "tag: all selected findings exported and tagged; filter: only findings matching a classifier."
+        },
+        "classifiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "title",
+              "sha256"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        },
+        "matched_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "traceLocation": {
+      "type": "object",
+      "required": [
+        "file_path",
+        "line",
+        "message"
+      ],
+      "properties": {
+        "file_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "source_finding_id",
+        "instance_id",
+        "source_url",
+        "application_id",
+        "application_name",
+        "ai_application_type",
+        "release_id",
+        "release_name",
+        "classifications",
+        "scan_id",
+        "rule_id",
+        "finding_domain",
+        "source_scan_type",
+        "analyzer_name",
+        "fortify_aviator",
+        "aviator_remediation_guidance_available",
+        "impact",
+        "probability",
+        "confidence",
+        "category",
+        "severity",
+        "source_status",
+        "developer_status",
+        "auditor_status",
+        "suppressed",
+        "exploited",
+        "malware",
+        "introduced_date",
+        "closed_date",
+        "last_modified_date",
+        "sca_provider",
+        "component_name",
+        "component_version",
+        "component_purl",
+        "advisory_ids",
+        "summary",
+        "explanation",
+        "recommendation",
+        "file_path",
+        "line",
+        "traces"
+      ],
+      "properties": {
+        "source_finding_id": {
+          "type": "string",
+          "description": "FoD vulnId; unique within a release."
+        },
+        "instance_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Fortify instance id; stable across scans of the same issue."
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "application_id": {
+          "type": "integer"
+        },
+        "application_name": {
+          "type": "string"
+        },
+        "ai_application_type": {
+          "$ref": "envelope.schema.json#/$defs/aiApplicationType"
+        },
+        "release_id": {
+          "type": "integer"
+        },
+        "release_name": {
+          "type": "string"
+        },
+        "scan_id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "rule_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finding_domain": {
+          "enum": [
+            "SAST",
+            "DAST",
+            "MAST",
+            "SCA",
+            "NETWORK",
+            "MONITORING",
+            "UNKNOWN"
+          ]
+        },
+        "source_scan_type": {
+          "type": "string"
+        },
+        "analyzer_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fortify_aviator": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "aviator_remediation_guidance_available": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "impact": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "probability": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ]
+        },
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "developer_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "auditor_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suppressed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "exploited": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "malware": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "introduced_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "closed_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_modified_date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sca_provider": {
+          "type": "null"
+        },
+        "component_name": {
+          "type": "null"
+        },
+        "component_version": {
+          "type": "null"
+        },
+        "component_purl": {
+          "type": "null"
+        },
+        "advisory_ids": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "explanation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recommendation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "traces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/traceLocation"
+          }
+        },
+        "classifications": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "description": "Ids of classifiers matching this finding (see envelope classification.classifiers)."
+        }
+      }
+    }
+  }
+}

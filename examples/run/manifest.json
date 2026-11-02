@@ -1,0 +1,69 @@
+{
+  "schema_name": "fortify.collector.manifest",
+  "schema_version": "1.0",
+  "run_id": "5e0a7c1d-3b2f-4e6a-9d8c-0f1e2d3c4b5a",
+  "source_platform": "fod",
+  "started_at": "2026-11-02T06:00:00Z",
+  "completed_at": "2026-11-02T09:10:25Z",
+  "status": "succeeded",
+  "fcli_version": "3.29.0",
+  "collector_version": "1.0.0",
+  "settings": {
+    "collectors": "inventory,findings",
+    "window_days": "2",
+    "inventory_mode": "full",
+    "scan_type": "All",
+    "severities": "Critical,High",
+    "release_filters": "sdlcStatusType:Production|QA",
+    "source_instance_id": "fod-ams-prod",
+    "fod_url": "https://api.ams.fortify.com",
+    "release_query": null,
+    "application_query": "attributes.?[name == 'Business Unit' && {'Payments'}.contains(value)].size() > 0",
+    "classifier_mode": "tag",
+    "classifiers": "[{\"id\":\"fod-aviator-guidance-available\",\"version\":1},{\"id\":\"fod-oss-malware\",\"version\":1}]"
+  },
+  "collectors": [
+    {
+      "collector": "inventory",
+      "status": "succeeded",
+      "exit_code": 0,
+      "started_at": "2026-11-02T06:00:01Z",
+      "completed_at": "2026-11-02T06:00:02Z",
+      "outputs": [
+        {
+          "file": "applications.json",
+          "bytes": 1934,
+          "sha256": "f7c361dc971e6c00b93961f0327ef5723e2b694dd712fe995dce360fdc356411",
+          "collection_type": "applications",
+          "schema_version": "1.0",
+          "record_count": 1
+        },
+        {
+          "file": "releases.json",
+          "bytes": 2363,
+          "sha256": "3b08f7122b1ec588391b24c08f5fbca5314f27bcf633445ead484f14020482ec",
+          "collection_type": "releases",
+          "schema_version": "1.0",
+          "record_count": 1
+        }
+      ]
+    },
+    {
+      "collector": "findings",
+      "status": "succeeded",
+      "exit_code": 0,
+      "started_at": "2026-11-02T06:00:04Z",
+      "completed_at": "2026-11-02T06:03:42Z",
+      "outputs": [
+        {
+          "file": "findings.json",
+          "bytes": 4556,
+          "sha256": "cef47dc73def847d49b67e34c0fed480ebb9adb665e5d64488bffaf28eb2af19",
+          "collection_type": "findings",
+          "schema_version": "1.0",
+          "record_count": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,235 @@
+# yaml-language-server: $schema=https://fortify.github.io/fcli/schemas/action/fcli-action-schema-2.10.0.json
+author: Fortify
+usage:
+  header: Export FoD application and release inventory to fortify.collector JSON 1.0.
+  description: >-
+    Read-only export of applications and releases visible to the session. Without --window-days a full inventory
+    snapshot is taken; with --window-days N only items modified since the start of the UTC day N days ago are
+    exported. --release-filters narrows releases only. With --scope-var, releases are limited to the stored scope
+    and applications to those owning an in-scope release.
+config:
+  rest.target.default: fod
+cli.options:
+  releaseFilters:
+    names: --release-filters
+    description: FoD filters expression applied when listing releases, for example sdlcStatusType:Production|QA.
+    required: false
+  scopeVar:
+    names: --scope-var
+    description: fcli variable holding pre-resolved release records (fcli fod release list --store).
+    required: false
+  releaseQuery:
+    names: --release-query
+    description: Release query used to resolve --scope-var; recorded in the output only.
+    required: false
+  applicationQuery:
+    names: --application-query
+    description: Application query used to resolve --scope-var; recorded in the output only.
+    required: false
+  windowDays:
+    names: --window-days
+    description: Incremental window in days (0-30) using modifiedStartDate; omit for a full snapshot.
+    type: int
+    required: false
+    default: -1
+  sourceInstance:
+    names: --source-instance
+    description: Stable identifier of the FoD tenant/instance this collector reads from.
+    required: false
+  actionHash:
+    names: --action-sha256
+    description: SHA256 of this action supplied by the trusted runner.
+    required: false
+  applicationsFile:
+    names: --applications-file
+    description: Output file for the applications collection.
+  releasesFile:
+    names: --releases-file
+    description: Output file for the releases collection.
+steps:
+  - if: ${cli.windowDays < -1 || cli.windowDays > 30}
+    throw: Invalid window-days; use a value between 0 and 30.
+  - var.set:
+      started: '${#now().toString()}'
+      applications: ${{}}
+      releases: ${{}}
+      scopeIds: ${{}}
+      appCount: 0
+      relCount: 0
+      windowObj: null
+      incremental: ${cli.windowDays >= 0}
+      scoped: ${cli.scopeVar != null}
+      allowedRel: ${{:}}
+      allowedApp: ${{:}}
+      windowStartDay: '${cli.windowDays >= 0 ? #now("-" + cli.windowDays + "d").toString().substring(0, 10) : null}'
+  - if: ${scoped}
+    records.for-each:
+      from: '${#var(cli.scopeVar)}'
+      record.var-name: r
+      do:
+        - var.set:
+            allowedRel.${"r" + r.releaseId}: true
+            allowedApp.${"a" + r.applicationId}: true
+  - var.set:
+      selectionObj: {fmt: selection}
+  - var.set:
+      modifiedStart: '${windowStartDay == null ? null : windowStartDay + "T00:00:00Z"}'
+  # Optional query params are appended manually because fcli sends null query values as empty parameters.
+  - var.set:
+      modifiedParam: '${modifiedStart == null ? "" : "&modifiedStartDate=" + #urlEncode(modifiedStart)}'
+      filterParam: '${cli.releaseFilters == null || scoped ? "" : "&filters=" + #urlEncode(cli.releaseFilters)}'
+  - rest.call:
+      apps:
+        uri: '/api/v3/applications?orderBy=applicationId${modifiedParam}'
+        type: paged
+        query:
+          limit: 50
+        records.for-each:
+          record.var-name: app
+          do:
+            - if: '${!scoped || allowedApp["a" + app.applicationId] != null}'
+              var.set:
+                applications..: {fmt: application}
+                appCount: ${appCount + 1}
+  - log.progress: Exported ${appCount} applications
+  - rest.call:
+      rels:
+        uri: '/api/v3/releases?orderBy=releaseId${filterParam}${modifiedParam}'
+        type: paged
+        query:
+          limit: 50
+        records.for-each:
+          record.var-name: rel
+          do:
+            - if: '${!scoped || allowedRel["r" + rel.releaseId] != null}'
+              var.set:
+                releases..: {fmt: release}
+                scopeIds..: ${rel.releaseId.toString()}
+                relCount: ${relCount + 1}
+  - log.progress: Exported ${relCount} releases
+  - if: ${incremental}
+    var.set:
+      windowObj: {fmt: window}
+  - out.write:
+      ${cli.applicationsFile}: {fmt: applicationsExport}
+      ${cli.releasesFile}: {fmt: releasesExport}
+formatters:
+  selection:
+    release_filters: ${cli.releaseFilters}
+    release_query: ${cli.releaseQuery}
+    application_query: ${cli.applicationQuery}
+  window:
+    days: ${cli.windowDays}
+    start: ${modifiedStart}
+    end: ${started}
+    granularity: day
+  attribute:
+    id: ${attr.id}
+    name: ${attr.name}
+    value: ${attr.value}
+  application:
+    application_id: ${app.applicationId}
+    application_name: ${app.applicationName}
+    application_description: ${app.applicationDescription}
+    application_type: ${app.applicationType}
+    business_criticality: ${app.businessCriticalityType}
+    created_date: ${app.applicationCreatedDate}
+    has_microservices: ${app.hasMicroservices}
+    ai_application_type: '${app.attributes == null ? null : (app.attributes.?[name == "AI Application Type" && {"Non AI","LLM Application","AI Agent"}.contains(value)].size() == 1 && app.attributes.?[name == "AI Application Type"].size() == 1 ? app.attributes.^[name == "AI Application Type"].value : null)}'
+    attributes: '${app.attributes ?: {}}'
+    source_url: '${#fod.appBrowserUrl(app)}'
+  release:
+    release_id: ${rel.releaseId}
+    release_name: ${rel.releaseName}
+    release_description: ${rel.releaseDescription}
+    application_id: ${rel.applicationId}
+    application_name: ${rel.applicationName}
+    microservice_id: ${rel.microserviceId}
+    microservice_name: ${rel.microserviceName}
+    sdlc_status: ${rel.sdlcStatusType}
+    suspended: ${rel.suspended}
+    created_date: ${rel.releaseCreatedDate}
+    star_rating: ${rel.rating}
+    is_passed: ${rel.isPassed}
+    pass_fail_reason: ${rel.passFailReasonType}
+    analysis_status: ${rel.currentAnalysisStatusType}
+    current_static_scan_id: ${rel.currentStaticScanId}
+    current_dynamic_scan_id: ${rel.currentDynamicScanId}
+    current_mobile_scan_id: ${rel.currentMobileScanId}
+    static_scan_date: ${rel.staticScanDate}
+    dynamic_scan_date: ${rel.dynamicScanDate}
+    mobile_scan_date: ${rel.mobileScanDate}
+    issue_count: ${rel.issueCount}
+    issue_counts:
+      critical: ${rel.critical}
+      high: ${rel.high}
+      medium: ${rel.medium}
+      low: ${rel.low}
+    attributes: '${rel.attributes ?: {}}'
+    source_url: '${#fod.releaseBrowserUrl(rel)}'
+  applicationsExport:
+    schema_name: fortify.collector
+    schema_version: "1.0"
+    collection_type: applications
+    collection_id: '${#action.runID()}'
+    started_at: ${started}
+    completed_at: '${#now().toString()}'
+    source_platform: fod
+    source_instance_id: ${cli.sourceInstance}
+    requested_scope: tenant
+    release_filters: null
+    selection: ${selectionObj}
+    resolved_scope_ids: ${{}}
+    window: ${windowObj}
+    producer:
+      kind: fcli
+      name: fcli
+      version: '${#fcliBuildProperties().fcliVersion}'
+      collector_id: fortify.fod.applications
+      collector_version: "1.0"
+      collector_sha256: ${cli.actionHash}
+    coverage:
+      retrieval_complete: true
+      details_complete: true
+      coverage_mode: '${incremental ? "incremental" : (scoped ? "filtered-snapshot" : "full-snapshot")}'
+      snapshot_consistent: false
+      authoritative_for_lifecycle: '${!incremental && !scoped}'
+      fetched_count: ${appCount}
+      capabilities:
+        - application-attributes
+      warnings:
+        - '${scoped ? "Applications are limited to owners of in-scope releases." : "Applications are limited only by API key or user access; release filters are not applied."}'
+    applications: ${applications}
+  releasesExport:
+    schema_name: fortify.collector
+    schema_version: "1.0"
+    collection_type: releases
+    collection_id: '${#action.runID()}'
+    started_at: ${started}
+    completed_at: '${#now().toString()}'
+    source_platform: fod
+    source_instance_id: ${cli.sourceInstance}
+    requested_scope: tenant
+    release_filters: ${cli.releaseFilters}
+    selection: ${selectionObj}
+    resolved_scope_ids: ${scopeIds}
+    window: ${windowObj}
+    producer:
+      kind: fcli
+      name: fcli
+      version: '${#fcliBuildProperties().fcliVersion}'
+      collector_id: fortify.fod.releases
+      collector_version: "1.0"
+      collector_sha256: ${cli.actionHash}
+    coverage:
+      retrieval_complete: true
+      details_complete: true
+      coverage_mode: '${incremental ? "incremental" : (cli.releaseFilters == null && !scoped ? "full-snapshot" : "filtered-snapshot")}'
+      snapshot_consistent: false
+      authoritative_for_lifecycle: '${!incremental && cli.releaseFilters == null && !scoped}'
+      fetched_count: ${relCount}
+      capabilities:
+        - release-attributes
+        - release-issue-counts
+      warnings: '${cli.releaseFilters == null && !scoped ? {} : {"Release and application selection limit coverage to the resolved_scope_ids."}}'
+    releases: ${releases}

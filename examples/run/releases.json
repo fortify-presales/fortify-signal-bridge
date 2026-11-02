@@ -1,0 +1,77 @@
+{
+  "schema_name": "fortify.collector",
+  "schema_version": "1.0",
+  "collection_type": "releases",
+  "collection_id": "0d4b8f3e-2c71-4a9e-b6f5-71e3a9c2d480",
+  "started_at": "2026-11-02T06:00:01.004Z",
+  "completed_at": "2026-11-02T06:00:02.561Z",
+  "source_platform": "fod",
+  "source_instance_id": "fod-ams-prod",
+  "requested_scope": "tenant",
+  "release_filters": "sdlcStatusType:Production|QA",
+  "selection": {
+    "release_filters": "sdlcStatusType:Production|QA",
+    "release_query": null,
+    "application_query": "attributes.?[name == 'Business Unit' && {'Payments'}.contains(value)].size() > 0"
+  },
+  "resolved_scope_ids": [
+    "1001"
+  ],
+  "window": null,
+  "producer": {
+    "kind": "fcli",
+    "name": "fcli",
+    "version": "3.29.0",
+    "collector_id": "fortify.fod.releases",
+    "collector_version": "1.0",
+    "collector_sha256": "9f2e1d0c3b4a59687766554433221100ffeeddccbbaa99887766554433221100"
+  },
+  "coverage": {
+    "retrieval_complete": true,
+    "details_complete": true,
+    "coverage_mode": "filtered-snapshot",
+    "snapshot_consistent": false,
+    "authoritative_for_lifecycle": false,
+    "fetched_count": 1,
+    "capabilities": [
+      "release-attributes",
+      "release-issue-counts"
+    ],
+    "warnings": [
+      "Release filters limit coverage to the resolved_scope_ids."
+    ]
+  },
+  "releases": [
+    {
+      "release_id": 1001,
+      "release_name": "2026.11",
+      "release_description": null,
+      "application_id": 501,
+      "application_name": "Payments",
+      "microservice_id": null,
+      "microservice_name": null,
+      "sdlc_status": "Production",
+      "suspended": false,
+      "created_date": "2026-09-01T08:00:00",
+      "star_rating": 2,
+      "is_passed": false,
+      "pass_fail_reason": "Critical issues",
+      "analysis_status": "Completed",
+      "current_static_scan_id": 77012,
+      "current_dynamic_scan_id": null,
+      "current_mobile_scan_id": null,
+      "static_scan_date": "2026-11-01T14:02:10",
+      "dynamic_scan_date": null,
+      "mobile_scan_date": null,
+      "issue_count": 14,
+      "issue_counts": {
+        "critical": 1,
+        "high": 3,
+        "medium": 6,
+        "low": 4
+      },
+      "attributes": [],
+      "source_url": "https://ams.fortify.com/Redirect/Releases/1001"
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.collector/1.0/manifest.schema.json",
+  "title": "fortify.collector 1.0 run manifest",
+  "description": "Written last by bin/collect.sh into each completed run directory.",
+  "type": "object",
+  "required": [
+    "schema_name",
+    "schema_version",
+    "run_id",
+    "source_platform",
+    "started_at",
+    "completed_at",
+    "status",
+    "fcli_version",
+    "collector_version",
+    "settings",
+    "collectors"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "fortify.collector.manifest"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "source_platform": {
+      "const": "fod"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "failed"
+      ]
+    },
+    "fcli_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "collector_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "settings": {
+      "type": "object",
+      "description": "Non-secret runner configuration; credentials are never recorded.",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "collectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "collector",
+          "status",
+          "exit_code",
+          "started_at",
+          "completed_at",
+          "outputs"
+        ],
+        "properties": {
+          "collector": {
+            "enum": [
+              "inventory",
+              "scans",
+              "findings",
+              "eventlog"
+            ]
+          },
+          "status": {
+            "enum": [
+              "succeeded",
+              "failed"
+            ]
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "file",
+                "bytes",
+                "sha256",
+                "collection_type",
+                "schema_version",
+                "record_count"
+              ],
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "collection_type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "schema_version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "record_count": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

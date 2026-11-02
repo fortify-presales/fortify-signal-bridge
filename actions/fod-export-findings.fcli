@@ -1,0 +1,551 @@
+# yaml-language-server: $schema=https://fortify.github.io/fcli/schemas/action/fcli-action-schema-2.10.0.json
+author: Fortify
+usage:
+  header: Export FoD findings to fortify.collector JSON 1.0.
+  description: >-
+    Read-only export for one release (--release), the releases stored in an fcli variable (--scope-var), or every
+    release visible to the session, optionally narrowed with --release-filters. With --window-days N, only findings
+    whose lastModifiedDate falls on one of the UTC days from N days ago up to today are exported; otherwise a full
+    snapshot is taken. Classifiers defined through COLLECTOR_CLASSIFIER_<n>_* environment variables tag findings, or
+    with --classifier-mode filter restrict the export to matching findings. Defaults to Static Critical/High.
+    No record-count cap and no absence-based lifecycle authority.
+config:
+  rest.target.default: fod
+cli.options:
+  release:
+    names: --release, --rel
+    description: FoD release ID or application:release; omit to export all releases visible to the session.
+    required: false
+  releaseFilters:
+    names: --release-filters
+    description: FoD filters expression applied when listing releases, for example sdlcStatusType:Production|QA.
+    required: false
+  scopeVar:
+    names: --scope-var
+    description: fcli variable holding pre-resolved release records (fcli fod release list --store); overrides release listing.
+    required: false
+  releaseQuery:
+    names: --release-query
+    description: Release query used to resolve --scope-var; recorded in the output only.
+    required: false
+  applicationQuery:
+    names: --application-query
+    description: Application query used to resolve --scope-var; recorded in the output only.
+    required: false
+  classifierMode:
+    names: --classifier-mode
+    description: tag adds classifications to every exported finding; filter exports only findings matching a classifier.
+    required: false
+    default: '${#env("COLLECTOR_CLASSIFIER_MODE") ?: "tag"}'
+  sourceInstance:
+    names: --source-instance
+    description: Stable identifier of the FoD tenant/instance this collector reads from.
+    required: false
+  scanType:
+    names: --scan-type
+    description: FoD scan type such as Static, Dynamic, Mobile, OpenSource, Network or Monitoring; All retrieves all types.
+    required: false
+    default: Static
+  severities:
+    names: --severities, --severity-string
+    description: Comma-separated severityString values, or All for every severity.
+    required: false
+    default: Critical,High
+  windowDays:
+    names: --window-days
+    description: Incremental window in days (0-30); 0 means today only (UTC).
+    type: int
+    required: false
+    default: -1
+  modifiedSince:
+    names: --modified-since
+    description: Legacy single lastModifiedDate day in YYYY/MM/DD; mutually exclusive with --window-days.
+    required: false
+  actionHash:
+    names: --action-sha256
+    description: SHA256 of this action supplied by the trusted runner.
+    required: false
+  file:
+    names: --file
+    description: Output file for the findings collection.
+steps:
+  - if: ${!(cli.scanType matches '[A-Za-z][A-Za-z0-9]{0,63}')}
+    throw: Invalid scan type; use an alphanumeric FoD type name or All.
+  - if: '${cli.modifiedSince != null && !(cli.modifiedSince matches "[0-9]{4}/[0-9]{2}/[0-9]{2}")}'
+    throw: Invalid modified-since date; use YYYY/MM/DD.
+  - if: ${cli.windowDays < -1 || cli.windowDays > 30}
+    throw: Invalid window-days; use a value between 0 and 30.
+  - if: ${cli.windowDays >= 0 && cli.modifiedSince != null}
+    throw: Use either --window-days or --modified-since, not both.
+  - if: ${cli.release != null && cli.releaseFilters != null}
+    throw: Use either --release or --release-filters, not both.
+  - if: ${cli.release != null && cli.scopeVar != null}
+    throw: Use either --release or --scope-var, not both.
+  - if: ${!{'tag','filter'}.contains(cli.classifierMode)}
+    throw: Invalid classifier-mode; use tag or filter.
+  - var.set:
+      started: '${#now().toString()}'
+      classifiers: ${{}}
+      appClassifiers: ${{}}
+      clsHasApp: ${{:}}
+      tags: ${{:}}
+      appOk: ${{:}}
+      classifiedCount: 0
+      findings: ${{}}
+      issues: ${{}}
+      apps: ${{}}
+      days: ${{}}
+      targetReleases: ${{}}
+      scopeIds: ${{}}
+      warnings: ${{}}
+      seen: ${{:}}
+      aiTypes: ${{:}}
+      count: 0
+      incremental: ${cli.windowDays >= 0 || cli.modifiedSince != null}
+      embedTypes: '${cli.scanType == "Static" ? "details,recommendations,traces" : "details,recommendations"}'
+      severityValues: '${cli.severities == "All" ? {} : cli.severities.split(",")}'
+      windowStartDay: '${cli.windowDays >= 0 ? #now("-" + cli.windowDays + "d").toString().substring(0, 10) : (cli.modifiedSince != null ? cli.modifiedSince.replace("/", "-") : null)}'
+  - records.for-each:
+      from: ${severityValues}
+      record.var-name: selectedSeverity
+      do:
+        - if: ${!{'Critical','High','Medium','Low','Info','Best_Practice'}.contains(selectedSeverity)}
+          throw: Invalid severity selection; use supported severityString values or All.
+  - if: ${cli.modifiedSince != null}
+    var.set:
+      days..: ${cli.modifiedSince}
+  - if: ${cli.windowDays >= 0}
+    records.for-each:
+      from: ${{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30}}
+      record.var-name: offset
+      breakIf: ${offset > cli.windowDays}
+      do:
+        - var.set:
+            days..: '${#now("-" + offset + "d").toString().substring(0, 10).replace("-", "/")}'
+  - if: ${cli.release != null}
+    var.set:
+      targetReleases..: '${#fod.release(cli.release)}'
+  - if: ${cli.scopeVar != null}
+    var.set:
+      targetReleases: '${#var(cli.scopeVar)}'
+  - if: ${cli.release == null && cli.scopeVar == null}
+    rest.call:
+      releaseList:
+        uri: '/api/v3/releases?orderBy=releaseId${cli.releaseFilters == null ? "" : "&filters=" + #urlEncode(cli.releaseFilters)}'
+        type: paged
+        query:
+          limit: 50
+        records.for-each:
+          record.var-name: r
+          do:
+            - var.set:
+                targetReleases..: ${r}
+  - if: ${cli.release != null}
+    rest.call:
+      oneApp:
+        uri: /api/v3/applications/${targetReleases[0].applicationId}
+        on.success:
+          - var.set:
+              apps..: ${oneApp_raw}
+  - if: ${cli.release == null}
+    rest.call:
+      allApps:
+        uri: /api/v3/applications
+        type: paged
+        query:
+          limit: 50
+        records.for-each:
+          record.var-name: app
+          do:
+            - var.set:
+                apps..: ${app}
+  - records.for-each:
+      from: ${apps}
+      record.var-name: app
+      do:
+        - var.set:
+            aiValue: null
+            aiValueCount: 0
+        - records.for-each:
+            from: ${app.attributes?:{}}
+            record.var-name: appAttribute
+            do:
+              - if: ${appAttribute.name == 'AI Application Type'}
+                var.set:
+                  aiValue: ${appAttribute.value}
+                  aiValueCount: ${aiValueCount + 1}
+        - if: ${aiValueCount == 1 && {'Non AI','LLM Application','AI Agent'}.contains(aiValue)}
+          var.set:
+            aiTypes.${"a" + app.applicationId}: ${aiValue}
+  - var.set:
+      scanFilter: '${cli.scanType == "All" || cli.scanType == "OpenSource" ? "" : "scantype:" + cli.scanType}'
+      severityFilter: '${cli.severities == "All" ? "" : "severityString:" + cli.severities.replace(",", "|")}'
+  - var.set:
+      combinedFilter: '${scanFilter + (scanFilter != "" && severityFilter != "" ? "+" : "") + severityFilter}'
+      sourceTypeQuery: >-
+        ${cli.scanType == "OpenSource" ? "scantype == 'Open Source'" : ""}
+      severityQuery: >-
+        ${cli.severities == "All" ? "" : "{'" + #join("','", severityValues) + "'}.contains(severityString)"}
+  - var.set:
+      combinedQuery: '${sourceTypeQuery + (sourceTypeQuery != "" && severityQuery != "" ? " && " : "") + severityQuery}'
+  - var.set:
+      filterOption: >-
+        ${cli.scanType == 'OpenSource' ? (combinedQuery == '' ? '' : '--query ' + #jsonStringify(combinedQuery, false)) : (combinedFilter == '' ? '' : '--filters-param ' + #jsonStringify(combinedFilter, false))}
+      domainMap: '${{Static:"SAST",Dynamic:"DAST",Mobile:"MAST",OpenSource:"SCA",Network:"NETWORK",Monitoring:"MONITORING"}}'
+  - records.for-each:
+      from: ${{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49}}
+      record.var-name: ci
+      breakIf: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_ID") == null}'
+      do:
+        - if: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_ISSUE_QUERY") == null}'
+          throw: 'Classifier ${#env("COLLECTOR_CLASSIFIER_" + ci + "_ID")} has no COLLECTOR_CLASSIFIER_${ci}_ISSUE_QUERY; regenerate the COLLECTOR_CLASSIFIER_* variables with bin/prepare_config.py.'
+        - var.set:
+            classifiers..: {fmt: classifierDef}
+        - if: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_APPLICATION_QUERY") != null}'
+          var.set:
+            appClassifiers..: {fmt: classifierDef}
+            clsHasApp.${"c" + ci}: true
+  - if: '${cli.classifierMode == "filter" && classifiers.size() == 0}'
+    throw: Classifier mode filter requires at least one COLLECTOR_CLASSIFIER_<n>_ID definition.
+  - if: ${appClassifiers.size() > 0}
+    run.fcli:
+      classifierApps:
+        cmd: fod app list --store collector_cls_apps
+        stdout: suppress
+  # Classifier queries are evaluated by fcli itself against stored records, so custom SpEL needs no action changes.
+  - records.for-each:
+      from: ${appClassifiers}
+      record.var-name: cls
+      do:
+        - run.fcli:
+            clsApps:
+              cmd: 'util variable contents collector_cls_apps -q "${cls.applicationQuery}"'
+              records.for-each:
+                record.var-name: m
+                do:
+                  - var.set:
+                      appOk.${"c" + cls.index + "a" + m.applicationId}: true
+  - records.for-each:
+      from: ${targetReleases}
+      record.var-name: rel
+      do:
+        - var.set:
+            scopeIds..: ${rel.releaseId.toString()}
+            candidates: ${{}}
+        - log.progress: 'Retrieving findings for ${rel.applicationName}:${rel.releaseName} (${rel.releaseId})'
+        - if: ${!incremental}
+          run.fcli:
+            fullIssues:
+              cmd: fod issue list --rel "${rel.releaseId}" --include "visible,suppressed,fixed" ${filterOption} --store collector_rel_issues
+              records.for-each:
+                record.var-name: issue
+                do:
+                  - var.set:
+                      candidates..: ${issue}
+        - if: ${incremental}
+          records.for-each:
+            from: ${days}
+            record.var-name: day
+            do:
+              - rest.call:
+                  changedIssues:
+                    uri: /api/v3/releases/${rel.releaseId}/vulnerabilities
+                    type: paged
+                    query:
+                      lastModifiedDate: ${day}
+                      includeSuppressed: true
+                      includeFixed: true
+                      limit: 50
+                    records.for-each:
+                      record.var-name: issue
+                      do:
+                        - if: ${issue.releaseId != rel.releaseId}
+                          throw: Incremental response returned an issue outside the selected release.
+                        - var.set:
+                            issueKey: ${"r" + rel.releaseId + "v" + issue.vulnId}
+                            normalizedScanType: '${issue.scantype == "Open Source" ? "OpenSource" : issue.scantype}'
+                        - if: '${cli.severities != "All" && #isBlank(issue.severityString)}'
+                          throw: Incremental response omitted severity required by the selected filter.
+                        - if: '${seen[issueKey] == null && (cli.scanType == "All" || normalizedScanType == cli.scanType) && (cli.severities == "All" || severityValues.contains(issue.severityString))}'
+                          var.set:
+                            seen.${issueKey}: true
+                            candidates..: ${issue}
+        - if: ${incremental && classifiers.size() > 0 && candidates.size() > 0}
+          run.fcli:
+            classifierIssues:
+              cmd: fod issue list --rel "${rel.releaseId}" --include "visible,suppressed,fixed" ${filterOption} --store collector_rel_issues
+              stdout: suppress
+        - if: ${candidates.size() > 0}
+          records.for-each:
+            from: ${classifiers}
+            record.var-name: cls
+            do:
+              - if: '${clsHasApp["c" + cls.index] == null || appOk["c" + cls.index + "a" + rel.applicationId] != null}'
+                run.fcli:
+                  clsIssues:
+                    cmd: 'util variable contents collector_rel_issues -q "${cls.issueQuery}"'
+                    records.for-each:
+                      record.var-name: m
+                      do:
+                        - var.set:
+                            tagKey: ${"r" + rel.releaseId + "v" + m.vulnId}
+                        - var.set:
+                            tags.${tagKey}: '${(tags[tagKey] ?: "") + "," + cls.id}'
+        - records.for-each:
+            from: ${candidates}
+            record.var-name: issue
+            do:
+              - var.set:
+                  issueKey: ${"r" + rel.releaseId + "v" + issue.vulnId}
+              - if: '${cli.classifierMode == "tag" || tags[issueKey] != null}'
+                do:
+                  - var.set:
+                      detail: null
+                  - run.fcli:
+                      issueDetails:
+                        cmd: fod issue get ${issue.vulnId} --rel "${rel.releaseId}" --embed "${embedTypes}"
+                        records.collect: true
+                        on.success:
+                          - var.set:
+                              detail: ${issueDetails.records}
+                        # FoD intermittently returns 502/504 on detail endpoints; two delayed retries before failing.
+                        on.fail:
+                          - log.warn: 'Retrying details for ${issue.vulnId} after FoD error'
+                          - sleep: 5000
+                          - run.fcli:
+                              issueDetailsRetry:
+                                cmd: fod issue get ${issue.vulnId} --rel "${rel.releaseId}" --embed "${embedTypes}"
+                                records.collect: true
+                                on.success:
+                                  - var.set:
+                                      detail: ${issueDetailsRetry.records}
+                                on.fail:
+                                  - log.warn: 'Retrying details for ${issue.vulnId} again after FoD error'
+                                  - sleep: 20000
+                                  - run.fcli:
+                                      issueDetailsRetry2:
+                                        cmd: fod issue get ${issue.vulnId} --rel "${rel.releaseId}" --embed "${embedTypes}"
+                                        records.collect: true
+                                        on.success:
+                                          - var.set:
+                                              detail: ${issueDetailsRetry2.records}
+                  - if: '${detail == null || detail.size() != 1 || detail[0].instanceId != issue.instanceId}'
+                    throw: Detail lookup did not match the listed native finding.
+                  - var.set:
+                      issue.details: ${detail[0].details}
+                      issue.recommendations: ${detail[0].recommendations}
+                      issue.traces: ${detail[0].traces}
+                      issue.collectorRelease: ${rel}
+                      issues..: ${issue}
+  - records.for-each:
+      from: ${issues}
+      record.var-name: issue
+      do:
+        - var.set:
+            cr: ${issue.collectorRelease}
+            normalizedScanType: '${issue.scantype == "Open Source" ? "OpenSource" : issue.scantype}'
+            fkey: ${"r" + issue.collectorRelease.releaseId + "v" + issue.vulnId}
+        - var.set:
+            issueClasses: '${tags[fkey] == null ? {} : tags[fkey].substring(1).split(",")}'
+            classifiedCount: '${classifiedCount + (tags[fkey] == null ? 0 : 1)}'
+        - if: ${issue.releaseId != cr.releaseId}
+          throw: Export returned a finding outside the selected release.
+        - if: ${cli.scanType != 'All' && normalizedScanType != cli.scanType}
+          throw: Export returned a finding outside the selected scan type.
+        - if: ${cli.severities != 'All' && !#isBlank(issue.severityString) && !severityValues.contains(issue.severityString)}
+          throw: Export returned a finding outside the severity selection.
+        - if: '${cli.scanType == "All" && issue.scantype == "Static"}'
+          rest.call:
+            staticTraces:
+              uri: /api/v3/releases/${cr.releaseId}/vulnerabilities/${#urlEncode(issue.vulnId)}/traces
+              query:
+                limit: -1
+              on.success:
+                - var.set:
+                    issue.traces: ${staticTraces_raw}
+        - if: '${issue.details == null || issue.recommendations == null || (issue.scantype == "Static" && issue.traces == null)}'
+          throw: Required finding detail is missing.
+        - var.set:
+            traceLocations: ${{}}
+        - records.for-each:
+            from: ${issue.traces?.items?:{}}
+            record.var-name: trace
+            do:
+              - records.for-each:
+                  from: ${trace.traceEntries?:{}}
+                  record.var-name: entry
+                  do:
+                    - var.set:
+                        traceLocations..: {fmt: traceLocation}
+        - var.set:
+            findings..: {fmt: finding}
+            count: ${count + 1}
+        - log.progress: Exported ${count} findings
+  - var.set:
+      windowObj: null
+      scopeObj: null
+      coverageMode: '${incremental ? "incremental" : (cli.severities == "All" && cli.scanType == "All" && cli.releaseFilters == null && cli.scopeVar == null && cli.classifierMode == "tag" ? "full-snapshot" : "filtered-snapshot")}'
+      warnings..: Absence is not evidence of remediation. Sensitive HTTP request/response data is not exported.
+  - if: ${cli.severities != 'All' || cli.scanType != 'All'}
+    var.set:
+      warnings..: Severity and scan-type selection limit coverage.
+  - if: ${cli.releaseFilters != null}
+    var.set:
+      warnings..: Release filters limit coverage to the resolved_scope_ids.
+  - if: ${cli.scopeVar != null}
+    var.set:
+      warnings..: Release and application selection limit coverage to the resolved_scope_ids.
+  - if: '${cli.classifierMode == "filter"}'
+    var.set:
+      warnings..: Only findings matching at least one classifier are exported.
+  - run.fcli:
+      cleanup:
+        cmd: util variable delete collector_rel_issues
+        stdout: suppress
+        stderr: suppress
+        on.fail:
+          - log.debug: No issue variable to clean up
+  - if: ${appClassifiers.size() > 0}
+    run.fcli:
+      cleanupApps:
+        cmd: util variable delete collector_cls_apps
+        stdout: suppress
+        stderr: suppress
+        on.fail:
+          - log.debug: No application variable to clean up
+  - if: ${incremental}
+    var.set:
+      windowObj: {fmt: window}
+  - var.set:
+      selectionObj: {fmt: selection}
+      classifierRefs: ${{}}
+  - records.for-each:
+      from: ${classifiers}
+      record.var-name: c
+      do:
+        - var.set:
+            classifierRefs..: {fmt: classifierRef}
+  - if: ${cli.release != null}
+    var.set:
+      scopeObj: {fmt: singleScope}
+  - out.write:
+      ${cli.file}: {fmt: export}
+formatters:
+  classifierDef:
+    index: ${ci}
+    id: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_ID")}'
+    version: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_VERSION")}'
+    title: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_TITLE")}'
+    sha256: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_SHA256")}'
+    issueQuery: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_ISSUE_QUERY")}'
+    applicationQuery: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_APPLICATION_QUERY") ?: ""}'
+  classifierRef:
+    id: ${c.id}
+    version: ${c.version}
+    title: ${c.title}
+    sha256: ${c.sha256}
+  selection:
+    release_filters: ${cli.releaseFilters}
+    release_query: ${cli.releaseQuery}
+    application_query: ${cli.applicationQuery}
+  window:
+    days: ${cli.windowDays}
+    start: '${windowStartDay + "T00:00:00Z"}'
+    end: ${started}
+    granularity: day
+  singleScope:
+    application_id: ${targetReleases[0].applicationId}
+    application_name: ${targetReleases[0].applicationName}
+    ai_application_type: '${aiTypes["a" + targetReleases[0].applicationId]}'
+    release_id: ${targetReleases[0].releaseId}
+    release_name: ${targetReleases[0].releaseName}
+  traceLocation:
+    file_path: ${entry.location}
+    line: '${entry.lineNumber > 0 ? entry.lineNumber : null}'
+    message: '${#htmlToText(entry.displayText)}'
+  export:
+    schema_name: fortify.collector
+    schema_version: "1.0"
+    collection_type: findings
+    collection_id: '${#action.runID()}'
+    started_at: ${started}
+    completed_at: '${#now().toString()}'
+    source_platform: fod
+    source_instance_id: ${cli.sourceInstance}
+    requested_scope: '${cli.release ?: "tenant"}'
+    release_filters: ${cli.releaseFilters}
+    selection: ${selectionObj}
+    resolved_scope_ids: ${scopeIds}
+    window: ${windowObj}
+    producer:
+      kind: fcli
+      name: fcli
+      version: '${#fcliBuildProperties().fcliVersion}'
+      collector_id: fortify.fod.findings
+      collector_version: "1.0"
+      collector_sha256: ${cli.actionHash}
+    coverage:
+      retrieval_complete: true
+      details_complete: true
+      coverage_mode: ${coverageMode}
+      snapshot_consistent: false
+      authoritative_for_lifecycle: false
+      fetched_count: ${count}
+      capabilities:
+        - finding-details
+        - finding-traces
+        - classifications
+      warnings: ${warnings}
+    classification:
+      mode: ${cli.classifierMode}
+      classifiers: ${classifierRefs}
+      matched_count: ${classifiedCount}
+    scan_type: ${cli.scanType}
+    severities: ${severityValues}
+    modified_since: ${cli.modifiedSince}
+    scope: ${scopeObj}
+    profile: all-findings
+    profile_version: "1"
+    findings: ${findings}
+  finding:
+    source_finding_id: ${issue.vulnId}
+    instance_id: ${issue.instanceId}
+    source_url: '${#fod.issueBrowserUrl(issue)}'
+    application_id: ${cr.applicationId}
+    application_name: ${cr.applicationName}
+    ai_application_type: '${aiTypes["a" + cr.applicationId]}'
+    release_id: ${cr.releaseId}
+    release_name: ${cr.releaseName}
+    classifications: ${issueClasses}
+    scan_id: ${issue.scanId}
+    rule_id: ${issue.checkId}
+    finding_domain: '${issue.scantype == "Open Source" ? "SCA" : (domainMap[issue.scantype] == null ? "UNKNOWN" : domainMap[issue.scantype])}'
+    source_scan_type: '${issue.scantype == "Open Source" ? "OpenSource" : issue.scantype}'
+    analyzer_name: ${issue.details.analyzerName}
+    fortify_aviator: ${issue.fortifyAviator}
+    aviator_remediation_guidance_available: ${issue.aviatorRemediationGuidanceAvailable}
+    impact: ${issue.details.impact}
+    probability: ${issue.details.probability}
+    confidence: ${issue.details.confidence}
+    category: ${issue.category}
+    severity: ${issue.severityString}
+    source_status: ${issue.status}
+    developer_status: ${issue.developerStatus}
+    auditor_status: ${issue.auditorStatus}
+    suppressed: ${issue.isSuppressed}
+    exploited: ${issue.exploited}
+    malware: ${issue.malware}
+    introduced_date: ${issue.introducedDate}
+    closed_date: ${issue.closedDate}
+    last_modified_date: ${issue.lastModifiedDate}
+    sca_provider: null
+    component_name: null
+    component_version: null
+    component_purl: null
+    advisory_ids: ${{}}
+    summary: '${#cleanIssueDescription(issue.details.summary)}'
+    explanation: '${#cleanRuleDescription(issue.details.explanation)}'
+    recommendation: '${#cleanRuleDescription(issue.recommendations.recommendations)}'
+    file_path: ${issue.primaryLocationFull}
+    line: '${issue.lineNumber > 0 ? issue.lineNumber : null}'
+    traces: ${traceLocations}

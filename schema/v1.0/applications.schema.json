@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.collector/1.0/applications.schema.json",
+  "title": "fortify.collector 1.0 applications collection",
+  "description": "Produced by actions/fod-export-inventory.fcli (--applications-file). Dedupe key: application_id.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "applications"
+  ],
+  "properties": {
+    "collection_type": {
+      "const": "applications"
+    },
+    "producer": {
+      "properties": {
+        "collector_id": {
+          "const": "fortify.fod.applications"
+        }
+      }
+    },
+    "applications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "application_id",
+          "application_name",
+          "application_description",
+          "application_type",
+          "business_criticality",
+          "created_date",
+          "has_microservices",
+          "ai_application_type",
+          "attributes",
+          "source_url"
+        ],
+        "properties": {
+          "application_id": {
+            "type": "integer"
+          },
+          "application_name": {
+            "type": "string"
+          },
+          "application_description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "application_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "business_criticality": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_microservices": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "ai_application_type": {
+            "$ref": "envelope.schema.json#/$defs/aiApplicationType"
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "envelope.schema.json#/$defs/attribute"
+            }
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          }
+        }
+      }
+    }
+  }
+}

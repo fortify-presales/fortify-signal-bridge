@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.collector/1.0/scans.schema.json",
+  "title": "fortify.collector 1.0 scans collection",
+  "description": "Produced by actions/fod-export-scans.fcli (--file). Dedupe key: scan_id; later documents supersede earlier ones.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "scans"
+  ],
+  "properties": {
+    "collection_type": {
+      "const": "scans"
+    },
+    "producer": {
+      "properties": {
+        "collector_id": {
+          "const": "fortify.fod.scans"
+        }
+      }
+    },
+    "scans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "scan_id",
+          "application_id",
+          "application_name",
+          "release_id",
+          "release_name",
+          "scan_type",
+          "assessment_type",
+          "analysis_status",
+          "started_at",
+          "completed_at",
+          "is_remediation_scan",
+          "is_false_positive_challenge",
+          "scan_method",
+          "scan_tool",
+          "scan_tool_version",
+          "scan_policy",
+          "star_rating",
+          "total_issues",
+          "issue_counts",
+          "entitlement_units_consumed",
+          "cancel_reason",
+          "pause_details"
+        ],
+        "properties": {
+          "scan_id": {
+            "type": "integer"
+          },
+          "application_id": {
+            "type": "integer"
+          },
+          "application_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "release_id": {
+            "type": "integer"
+          },
+          "release_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scan_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "FoD scan type, e.g. Static, Dynamic, Mobile, OpenSource."
+          },
+          "assessment_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "analysis_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "FoD analysisStatusType, e.g. In_Progress, Completed, Canceled, Waiting."
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_remediation_scan": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "is_false_positive_challenge": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "scan_method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scan_tool": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scan_tool_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scan_policy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "star_rating": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "total_issues": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "issue_counts": {
+            "$ref": "envelope.schema.json#/$defs/issueCounts"
+          },
+          "entitlement_units_consumed": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cancel_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pause_details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pausedOn": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "notes": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

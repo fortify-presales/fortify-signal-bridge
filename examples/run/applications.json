@@ -1,0 +1,61 @@
+{
+  "schema_name": "fortify.collector",
+  "schema_version": "1.0",
+  "collection_type": "applications",
+  "collection_id": "0d4b8f3e-2c71-4a9e-b6f5-71e3a9c2d480",
+  "started_at": "2026-11-02T06:00:01.004Z",
+  "completed_at": "2026-11-02T06:00:02.553Z",
+  "source_platform": "fod",
+  "source_instance_id": "fod-ams-prod",
+  "requested_scope": "tenant",
+  "release_filters": null,
+  "selection": {
+    "release_filters": "sdlcStatusType:Production|QA",
+    "release_query": null,
+    "application_query": "attributes.?[name == 'Business Unit' && {'Payments'}.contains(value)].size() > 0"
+  },
+  "resolved_scope_ids": [],
+  "window": null,
+  "producer": {
+    "kind": "fcli",
+    "name": "fcli",
+    "version": "3.29.0",
+    "collector_id": "fortify.fod.applications",
+    "collector_version": "1.0",
+    "collector_sha256": "9f2e1d0c3b4a59687766554433221100ffeeddccbbaa99887766554433221100"
+  },
+  "coverage": {
+    "retrieval_complete": true,
+    "details_complete": true,
+    "coverage_mode": "full-snapshot",
+    "snapshot_consistent": false,
+    "authoritative_for_lifecycle": true,
+    "fetched_count": 1,
+    "capabilities": [
+      "application-attributes"
+    ],
+    "warnings": [
+      "Applications are limited only by API key or user access; release filters are not applied."
+    ]
+  },
+  "applications": [
+    {
+      "application_id": 501,
+      "application_name": "Payments",
+      "application_description": "Card payment services",
+      "application_type": "Web_Thick_Client",
+      "business_criticality": "High",
+      "created_date": "2024-02-11T09:15:00",
+      "has_microservices": false,
+      "ai_application_type": "Non AI",
+      "attributes": [
+        {
+          "id": 12,
+          "name": "AI Application Type",
+          "value": "Non AI"
+        }
+      ],
+      "source_url": "https://ams.fortify.com/Redirect/Applications/501"
+    }
+  ]
+}
