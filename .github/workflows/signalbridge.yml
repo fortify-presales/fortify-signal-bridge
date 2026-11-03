@@ -1,0 +1,46 @@
+name: signalbridge
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Syntax check
+        run: python -m compileall -q signalbridge tests bin tools
+      - name: Unit and contract tests
+        run: python -m pytest
+      - name: Validate sample collector output
+        run: python tools/validate_output.py examples/run
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build --platform linux/amd64 -t fortify-signalbridge:ci .
+      - name: Collector regression
+        run: |
+          docker run --rm --platform linux/amd64 --network none \
+            --mount type=bind,source=${PWD}/tools/test_collect.sh,target=/tmp/test_collect.sh,readonly \
+            --entrypoint bash fortify-signalbridge:ci \
+            -c 'sed "s/\r$//" /tmp/test_collect.sh | bash'
+      - name: Offline process smoke
+        run: |
+          mkdir -p out
+          chmod 777 out
+          docker run --rm --platform linux/amd64 --network none \
+            -e SOURCE_INSTANCE_ID=fod-ams-prod \
+            -v ${PWD}/examples/run/findings.json:/tmp/findings.json:ro \
+            -v ${PWD}/out:/tmp/out \
+            --entrypoint python3 fortify-signalbridge:ci \
+            -m signalbridge process --input /tmp/findings.json --output /tmp/out/signals.ndjson
+          test ! -s out/signals.ndjson

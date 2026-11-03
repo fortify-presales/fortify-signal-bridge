@@ -1,0 +1,18 @@
+id: ssc-reintroduced
+version: "1"
+description: Emit critical SSC findings reintroduced by a later scan.
+enabled: true
+platforms: [ssc]
+when:
+  all:
+    - classification: ssc-reintroduced
+      equals: true
+    - field: finding.severity
+      in: [Critical]
+    - field: finding.suppressed
+      equals: false
+emit:
+  type: ssc-reintroduced-critical
+  confidence: high
+  severity_from: finding.severity
+  title: Reintroduced critical SSC finding

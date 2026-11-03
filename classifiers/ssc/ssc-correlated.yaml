@@ -1,0 +1,5 @@
+# SSC reports correlation on the issue. This is not a SignalBridge join of SAST and DAST.
+id: ssc-correlated
+version: 1
+title: SSC finding with correlated issues
+issue_query: hasCorrelatedIssues == true

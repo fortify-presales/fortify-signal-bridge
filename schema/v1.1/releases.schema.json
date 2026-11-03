@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.collector/1.1/releases.schema.json",
+  "title": "fortify.collector 1.1 releases collection",
+  "description": "Produced by actions/fod-export-inventory.fcli (--releases-file). Dedupe key: release_id.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "type": "object",
+  "required": [
+    "releases"
+  ],
+  "properties": {
+    "collection_type": {
+      "const": "releases"
+    },
+    "producer": {
+      "properties": {
+        "collector_id": {
+          "enum": [
+            "fortify.fod.releases",
+            "fortify.ssc.releases"
+          ]
+        }
+      }
+    },
+    "releases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "release_id",
+          "release_name",
+          "release_description",
+          "application_id",
+          "application_name",
+          "microservice_id",
+          "microservice_name",
+          "sdlc_status",
+          "suspended",
+          "created_date",
+          "star_rating",
+          "is_passed",
+          "pass_fail_reason",
+          "analysis_status",
+          "current_static_scan_id",
+          "current_dynamic_scan_id",
+          "current_mobile_scan_id",
+          "static_scan_date",
+          "dynamic_scan_date",
+          "mobile_scan_date",
+          "issue_count",
+          "issue_counts",
+          "attributes",
+          "source_url"
+        ],
+        "properties": {
+          "release_id": {
+            "type": "integer"
+          },
+          "release_name": {
+            "type": "string"
+          },
+          "release_description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "application_id": {
+            "type": "integer"
+          },
+          "application_name": {
+            "type": "string"
+          },
+          "microservice_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "microservice_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sdlc_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Production, QA, Development or Retired."
+          },
+          "suspended": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "created_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "star_rating": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "is_passed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "pass_fail_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "analysis_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "current_static_scan_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "current_dynamic_scan_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "current_mobile_scan_id": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "static_scan_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dynamic_scan_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mobile_scan_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue_count": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "issue_counts": {
+            "$ref": "envelope.schema.json#/$defs/issueCounts"
+          },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "$ref": "envelope.schema.json#/$defs/attribute"
+            }
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          }
+        }
+      }
+    }
+  }
+}

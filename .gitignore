@@ -1,2 +1,8 @@
 .fortify
 secrets
+.venv
+/data
+/out
+actions.sha256
+run-fod.sh
+run-ssc.sh

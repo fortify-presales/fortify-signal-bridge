@@ -40,7 +40,10 @@ def main():
     parser.add_argument("--started-at", required=True)
     parser.add_argument("--fcli-version")
     parser.add_argument("--collector-version")
+    parser.add_argument("--source-platform", default="fod")
     args = parser.parse_args()
+
+    platform = args.source_platform or "fod"
 
     collectors = []
     with open(args.status_file, encoding="utf-8") as handle:
@@ -59,9 +62,9 @@ def main():
 
     manifest = {
         "schema_name": "fortify.collector.manifest",
-        "schema_version": "1.0",
+        "schema_version": "1.1" if platform == "ssc" else "1.0",
         "run_id": args.run_id,
-        "source_platform": "fod",
+        "source_platform": platform,
         "started_at": args.started_at,
         "completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "status": "succeeded" if all(c["status"] == "succeeded" for c in collectors) else "failed",

@@ -1,0 +1,5 @@
+# SSC issue was not present, then a later scan reported it again.
+id: ssc-reintroduced
+version: 1
+title: SSC finding reintroduced by a later scan
+issue_query: scanStatus == 'REINTRODUCED'

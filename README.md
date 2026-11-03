@@ -6,12 +6,15 @@ Each default run produces `applications.json`, `releases.json`, `findings.json` 
 
 Scheduling is out of scope: start the container from cron, a Kubernetes CronJob, or a CI pipeline.
 
+With no command, the image still runs the collector. `run`, `process`, `deliver`, and `validate` are SignalBridge commands. See [SignalBridge](#signalbridge) below.
+
 ## Contents
 
 | Path | Purpose |
 |---|---|
 | [actions/](actions/) | fcli actions: `fod-export-inventory`, `fod-export-findings`. |
-| [classifiers/](classifiers/) | Built-in finding classifiers (YAML). |
+| [classifiers/](classifiers/) | Built-in finding classifiers, one subdirectory per product (`fod`, `ssc`). |
+| [rules/](rules/) | Signal rules in the same product directories, plus `shared/` for a rule that applies to more than one product. |
 | [bin/collect.sh](bin/collect.sh) | Container entrypoint: validate config, login, resolve scope, run the collectors, write the manifest, logout. |
 | [bin/prepare_config.py](bin/prepare_config.py) | Validates classifier files and selection settings. |
 | [bin/Set-CollectorEnv.ps1](bin/Set-CollectorEnv.ps1) | Loads classifier variables into a PowerShell session for running the actions without the container. |
@@ -86,6 +89,8 @@ Every value can also be supplied as `<NAME>_FILE` pointing to a mounted secret f
 | `CLASSIFIER_MODE` | `tag` | `tag`: export all selected findings and add `classifications`; `filter`: export only findings matching a classifier. |
 | `SCAN_TYPE` | `All` | Findings scan type: `Static`, `Dynamic`, `Mobile`, `OpenSource`, `Network`, `Monitoring`, `All`. |
 | `SEVERITIES` | `Critical,High` | Findings severities, or `All`. |
+| `ISSUE_PAGE_SIZE` | `50` | SSC findings page size (1–200). A dropped issue-list response is retried twice for that page. Lower this if a page still fails. |
+| `SSC_SOCKET_TIMEOUT` | `15m` | Read timeout for the SSC session, for example `30s`, `15m`, or `1h`. fcli's own default is 5 minutes. |
 | `SOURCE_INSTANCE_ID` | _(empty)_ | Stable tenant identifier written into every document. |
 | `OUTPUT_DIR` | `/data/out` | Mounted output directory. |
 | `OUTPUT_UMASK` | `027` | File mode mask for output (findings are sensitive; widen only if the consumer needs it). |
@@ -121,7 +126,9 @@ application_query: >-           # optional SpEL over the owning application reco
   attributes.?[name == 'Business Unit' && value == 'Payments'].size() > 0
 ```
 
-Built-in classifiers ([classifiers/](classifiers/)):
+Built-in classifiers live in `classifiers/<platform>/`. A run loads only the directory for `FORTIFY_PLATFORM`. FoD is [classifiers/fod/](classifiers/fod/); SSC is [classifiers/ssc/](classifiers/ssc/). A later product, such as Sonatype, is another directory next to those. Custom files mounted with `CLASSIFIERS_DIR` stay a flat overlay and override a built-in with the same id.
+
+FoD ([classifiers/fod/](classifiers/fod/)):
 
 | Id | Matches |
 |---|---|
@@ -214,7 +221,7 @@ $releaseInfo = fcli fod release get $release --fod-session $fodSession -o json |
 fcli fod app get $releaseInfo.applicationId --fod-session $fodSession -o json
 ```
 
-**Open source malware or exploitation flags.** FoD issue rows use `scantype='Open Source'`; the collector normalizes this to `OpenSource` / `SCA`. These predicates mirror the built-in [fod-oss-malware](classifiers/fod-oss-malware.yaml) and [fod-oss-exploited](classifiers/fod-oss-exploited.yaml) classifiers.
+**Open source malware or exploitation flags.** FoD issue rows use `scantype='Open Source'`; the collector normalizes this to `OpenSource` / `SCA`. These predicates mirror the built-in [fod-oss-malware](classifiers/fod/fod-oss-malware.yaml) and [fod-oss-exploited](classifiers/fod/fod-oss-exploited.yaml) classifiers.
 
 ```powershell
 # Either risk flag
@@ -234,3 +241,60 @@ For comparisons with a collection, use the same release, session, severity selec
 Classifier evidence is not an active-Signal verdict: lifecycle, suppression, application context and Signal rules are evaluated separately. Live source changes since collection can also explain differences. `status` (source lifecycle), `developerStatus`, and `auditorStatus` are distinct; neither required remediation nor available Aviator guidance proves a completed, scan-validated fix or identifies who applied it.
 
 JSON exposes the raw matching fields even when the default table omits them. Start without `--embed`; only add `--embed details,recommendations` when investigating explanation/guidance content, as embedding makes extra requests and can hit FoD rate limits. Avoid requesting sensitive HTTP request/response data. Query options are verified locally, but representative live OSS flag results still require tenant validation.
+
+## SignalBridge
+
+SignalBridge reads a findings collection, evaluates signal rules, and delivers `fortify.signal` events. It does not decide that a missing finding is resolved. Delivery is at-least-once: the same observation keeps the same `event_id`, and a later run can emit it again. There is no database, broker, or scheduler in the image.
+
+Classifiers in [classifiers/](classifiers/) (`fod/`, `ssc/`, and later product directories) are source evidence, evaluated by fcli. Rules in [rules/](rules/) use those same directories and decide whether to emit a signal. A rule that emits from one classifier uses that classifier's file name and id. `rules/shared/` is for a rule that applies to more than one product. `emit.type` is the signal name delivered to sinks. A null finding field does not satisfy `equals: false`.
+
+| Command | What it does |
+|---|---|
+| *(none)* or `collect` | Existing collector. Exit codes stay 0, 1, and 2. |
+| `process --input findings.json --output signals.ndjson` | Rules only. No FoD or SSC login. |
+| `deliver --input signals.ndjson` | Send an existing NDJSON file to `SINKS`. |
+| `run` | Collect, process, deliver, then exit. |
+| `run --input findings.json --output signals.ndjson` | Process and deliver a file. No login. |
+| `validate` | Check the rule files and an optional document. |
+
+`run` exit codes: 0 success, 1 partial collection with successful delivery, 2 configuration or processing failure, 3 retryable destination failure, 4 required delivery or publication failure.
+
+### Source
+
+`FORTIFY_PLATFORM` is `fod` (default) or `ssc`. One run uses one product. `SOURCE_INSTANCE_ID` is required for `run` and `process` and must match the collection. FoD keeps `FOD_URL` and the existing release filters. SSC uses `SSC_URL` with `SSC_TOKEN` or `SSC_USER`/`SSC_PASSWORD` (or the matching `_FILE`). Do not set the other product's URL.
+
+`RUN_MODE` is `incremental` (default `WINDOW_DAYS`), `full` (`WINDOW_DAYS=full`), or `targeted` (`RELEASE_IDS`, and no filters or queries). SSC issue lists are fetched in pages of `ISSUE_PAGE_SIZE` so one application version cannot return a single response large enough for the connection to close mid-body. Each failed page is retried twice before the collector fails. The SSC session read timeout is `SSC_SOCKET_TIMEOUT` (default `15m`). SSC rejects `RELEASE_FILTERS` and `APPLICATION_ATTRIBUTES`. An SSC application version is stored as a release. SSC engine type `SCA` is static analysis and becomes finding domain `SAST`. Finding domain `SCA` means Debricked open source. `removedDate` is not a resolution.
+
+Shipped FoD rules use the classifier id. The delivered signal name is in parentheses: `fod-aviator-sast-true-positive` (`aviator-confirmed-sast`), `fod-aviator-dast-true-positive` (`aviator-confirmed-dast`), `fod-oss-exploited` (`known-exploited-open-source`), and `fod-oss-malware` (`open-source-malware`). `agentic-or-llm-application-risk` is in `rules/shared/` and also applies to SSC when `ai_application_type` is set. SSC rules: `ssc-reintroduced` (`ssc-reintroduced-critical`), `ssc-debricked` (`ssc-open-source-high`), `ssc-correlated` (`ssc-correlated-high`). `reachable-open-source-critical` and a FoD SAST/DAST correlation rule are not implemented: the findings contract has no reachable flag, and FoD has no cross-finding correlation key. `fod-aviator-guidance-available` has no signal rule.
+
+`DETAIL_LEVEL` is `summary` (default), `standard`, or `full`.
+
+### Output and sinks
+
+Collector files stay under `<OUTPUT_DIR>/fod/` or `<OUTPUT_DIR>/ssc/`. Each product records its latest run in `<OUTPUT_DIR>/<platform>/.last-run`. Signals are staged in `<OUTPUT_DIR>/signals/<platform>/.staging/<collection-id>/` and renamed to `complete/` or `failed/` under that same product directory. `manifest.json` is written last.
+
+`SINKS` defaults to `json`. `stdout` writes NDJSON. `crowdstrike` POSTs `{"event": <signal>}` batches to `CROWDSTRIKE_HEC_URL` using `CROWDSTRIKE_HEC_TOKEN` (prefer `_FILE`). It retries network errors and HTTP 408, 429, and 5xx, and does not retry other 4xx. `arcsight` sends CEF over syslog to an ArcSight 8.x Syslog NG Daemon or CEF Syslog SmartConnector (`ARCSIGHT_HOST`, `ARCSIGHT_PORT`, default TCP and RFC 5424). Syslog has no application acknowledgement: a batch counts as delivered when the socket write is flushed. The CEF REST connector is not used, because that connector polls a REST API. Optional TLS uses `ARCSIGHT_CA_FILE` and client certificate files. Tokens and keys are not written to logs.
+
+`CHECKPOINT_ENABLED` defaults to false. When true, a successful required delivery writes `CHECKPOINT_PATH` atomically. If `CHECKPOINT_PATH` is unset, the file is `/data/state/<platform>/checkpoint.json`, so FoD and SSC keep separate watermarks. The next incremental run derives a whole-day `WINDOW_DAYS` from `last_window_end` plus `CHECKPOINT_OVERLAP_MINUTES` (default 60). Deleting the file does not stop a run. The file is not used to infer closure.
+
+The image is published for `linux/amd64` because that is the platform of `fortifydocker/fcli:3.29-ubi9`. On an Apple Silicon host, build and run with `--platform linux/amd64`.
+
+### Example
+
+```powershell
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges `
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m `
+  -v "${PWD}/out:/data/out" -v "${PWD}/secrets:/run/secrets:ro" `
+  -e SOURCE_INSTANCE_ID=customer-fod-prod -e RUN_MODE=incremental -e SINKS=json `
+  -e FOD_URL=https://api.ams.fortify.com -e FOD_CLIENT_ID=... `
+  -e FOD_CLIENT_SECRET_FILE=/run/secrets/fod_client_secret `
+  fortify-signalbridge:0.1.0 run
+```
+
+Local processing without credentials:
+
+```powershell
+python -m signalbridge process --input examples/run/findings.json --output signals.ndjson
+```
+
+Set `SOURCE_INSTANCE_ID` to the collection's `source_instance_id`. The sample findings file matches only `fod-aviator-guidance-available`, which has no signal rule, so that command writes an empty file. `tests/fixtures/fod-rules.json` and `tests/fixtures/ssc-findings.json` cover the shipped rules.

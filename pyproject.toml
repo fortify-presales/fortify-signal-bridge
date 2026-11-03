@@ -1,0 +1,18 @@
+[project]
+name = "fortify-signalbridge"
+version = "0.1.0"
+description = "One-shot Fortify SignalBridge processor for fcli collector output"
+requires-python = ">=3.9"
+dependencies = [
+  "PyYAML>=5.4",
+  "jsonschema>=4.17",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+signalbridge = "signalbridge.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.collector/1.1/envelope.schema.json",
+  "title": "fortify.collector 1.1 collection envelope",
+  "description": "Fields shared by every collection document. The payload array is named after collection_type.",
+  "type": "object",
+  "required": [
+    "schema_name",
+    "schema_version",
+    "collection_type",
+    "collection_id",
+    "started_at",
+    "completed_at",
+    "source_platform",
+    "source_instance_id",
+    "requested_scope",
+    "release_filters",
+    "selection",
+    "resolved_scope_ids",
+    "window",
+    "producer",
+    "coverage"
+  ],
+  "properties": {
+    "schema_name": {
+      "const": "fortify.collector"
+    },
+    "schema_version": {
+      "const": "1.1"
+    },
+    "collection_type": {
+      "enum": [
+        "findings",
+        "applications",
+        "releases",
+        "scans",
+        "events"
+      ]
+    },
+    "collection_id": {
+      "type": "string",
+      "description": "Run id of the producing fcli invocation (or runner run id for converted collections)."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_platform": {
+      "enum": [
+        "fod",
+        "ssc"
+      ]
+    },
+    "source_instance_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Stable identifier of the FoD tenant configured by the runner."
+    },
+    "requested_scope": {
+      "type": "string",
+      "description": "'tenant' for tenant-wide collections, otherwise the requested release id or application:release."
+    },
+    "release_filters": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "FoD filters expression used to select releases, if any."
+    },
+    "resolved_scope_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Release ids covered by this collection. Empty means not release-scoped (applications, tenant event log, unfiltered scans)."
+    },
+    "window": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/window"
+        }
+      ]
+    },
+    "producer": {
+      "$ref": "#/$defs/producer"
+    },
+    "coverage": {
+      "$ref": "#/$defs/coverage"
+    },
+    "selection": {
+      "$ref": "#/$defs/selection"
+    }
+  },
+  "$defs": {
+    "window": {
+      "type": "object",
+      "required": [
+        "days",
+        "start",
+        "end",
+        "granularity"
+      ],
+      "properties": {
+        "days": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 30
+        },
+        "start": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "Inclusive start (UTC midnight N days ago)."
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "granularity": {
+          "enum": [
+            "day",
+            "rolling-24h"
+          ]
+        }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name",
+        "version",
+        "collector_id",
+        "collector_version",
+        "collector_sha256"
+      ],
+      "properties": {
+        "kind": {
+          "const": "fcli"
+        },
+        "name": {
+          "const": "fcli"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "collector_id": {
+          "enum": [
+            "fortify.fod.findings",
+            "fortify.fod.issue-history",
+            "fortify.fod.applications",
+            "fortify.fod.releases",
+            "fortify.fod.scans",
+            "fortify.fod.scan-lifecycle",
+            "fortify.fod.tenant-eventlog",
+            "fortify.ssc.applications",
+            "fortify.ssc.releases",
+            "fortify.ssc.findings"
+          ]
+        },
+        "collector_version": {
+          "type": "string"
+        },
+        "collector_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "retrieval_complete",
+        "details_complete",
+        "coverage_mode",
+        "snapshot_consistent",
+        "authoritative_for_lifecycle",
+        "fetched_count",
+        "capabilities",
+        "warnings"
+      ],
+      "properties": {
+        "retrieval_complete": {
+          "type": "boolean"
+        },
+        "details_complete": {
+          "type": "boolean"
+        },
+        "coverage_mode": {
+          "enum": [
+            "incremental",
+            "full-snapshot",
+            "filtered-snapshot"
+          ]
+        },
+        "snapshot_consistent": {
+          "type": "boolean"
+        },
+        "authoritative_for_lifecycle": {
+          "type": "boolean",
+          "description": "True only when absence of a record means it no longer exists. Findings collections leave this false."
+        },
+        "fetched_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "attribute": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "issueCounts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "properties": {
+        "critical": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "high": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "medium": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "low": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "aiApplicationType": {
+      "enum": [
+        "Non AI",
+        "LLM Application",
+        "AI Agent",
+        null
+      ]
+    },
+    "severity": {
+      "enum": [
+        "Critical",
+        "High",
+        "Medium",
+        "Low",
+        "Info",
+        "Best_Practice"
+      ]
+    },
+    "selection": {
+      "type": "object",
+      "description": "How the release scope was chosen. All null means every release visible to the credentials.",
+      "required": [
+        "release_filters",
+        "release_query",
+        "application_query"
+      ],
+      "properties": {
+        "release_filters": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Server-side FoD filters expression."
+        },
+        "release_query": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SpEL query over fcli release records."
+        },
+        "application_query": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SpEL query over fcli application records (includes APPLICATION_ATTRIBUTES)."
+        }
+      }
+    }
+  }
+}

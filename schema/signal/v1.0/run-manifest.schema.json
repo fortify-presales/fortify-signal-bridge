@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.signalbridge.run/1.0/run-manifest.schema.json",
+  "title": "fortify.signalbridge.run 1.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "collection_id",
+    "run_mode",
+    "source_platform",
+    "source_instance_id",
+    "started_at",
+    "completed_at",
+    "status",
+    "coverage",
+    "counts",
+    "documents",
+    "sinks",
+    "release"
+  ],
+  "properties": {
+    "schema_name": {"const": "fortify.signalbridge.run"},
+    "schema_version": {"const": "1.0"},
+    "collection_id": {"type": "string"},
+    "run_mode": {"type": ["string", "null"]},
+    "source_platform": {"enum": ["fod", "ssc"]},
+    "source_instance_id": {"type": "string"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["complete", "failed", "partial"]},
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retrieval_complete", "snapshot_consistent", "authoritative_for_lifecycle"],
+      "properties": {
+        "retrieval_complete": {"type": "boolean"},
+        "snapshot_consistent": {"type": "boolean"},
+        "authoritative_for_lifecycle": {"type": "boolean"}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "findings_collected",
+        "findings_valid",
+        "findings_rejected",
+        "signals_emitted",
+        "signals_delivered",
+        "signals_failed"
+      ],
+      "properties": {
+        "findings_collected": {"type": "integer", "minimum": 0},
+        "findings_valid": {"type": "integer", "minimum": 0},
+        "findings_rejected": {"type": "integer", "minimum": 0},
+        "signals_emitted": {"type": "integer", "minimum": 0},
+        "signals_delivered": {"type": "integer", "minimum": 0},
+        "signals_failed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "record_count", "sha256"],
+        "properties": {
+          "name": {"type": "string"},
+          "record_count": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "sinks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "required", "status", "delivered", "failed"],
+        "properties": {
+          "id": {"type": "string"},
+          "required": {"type": "boolean"},
+          "status": {"enum": ["complete", "failed", "skipped"]},
+          "delivered": {"type": "integer", "minimum": 0},
+          "failed": {"type": "integer", "minimum": 0},
+          "error_category": {"type": "string"}
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "processor_version",
+        "collector_version",
+        "fcli_version",
+        "action_sha256",
+        "classifier_bundle_sha256",
+        "rule_bundle_sha256",
+        "signal_schema_version",
+        "collection_schema_version"
+      ],
+      "properties": {
+        "processor_version": {"type": "string"},
+        "collector_version": {"type": ["string", "null"]},
+        "fcli_version": {"type": ["string", "null"]},
+        "action_sha256": {"type": ["string", "null"]},
+        "classifier_bundle_sha256": {"type": "string"},
+        "rule_bundle_sha256": {"type": "string"},
+        "signal_schema_version": {"const": "1.0"},
+        "collection_schema_version": {"type": "string"}
+      }
+    }
+  }
+}

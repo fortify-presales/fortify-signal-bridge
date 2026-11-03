@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fortify.local/schemas/fortify.signal/1.0/fortify-signal.schema.json",
+  "title": "fortify.signal 1.0",
+  "description": "One observed security signal. Destination adapters must not change these fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_name",
+    "schema_version",
+    "event_id",
+    "event_type",
+    "observed_at",
+    "source",
+    "application",
+    "signal",
+    "finding",
+    "evidence",
+    "provenance"
+  ],
+  "properties": {
+    "schema_name": {"const": "fortify.signal"},
+    "schema_version": {"const": "1.0"},
+    "event_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "event_type": {"const": "fortify.signal.observed"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "instance_id", "application_id", "release_id", "finding_id", "deep_link"],
+      "properties": {
+        "platform": {"enum": ["fod", "ssc"]},
+        "instance_id": {"type": "string"},
+        "application_id": {"type": "integer"},
+        "release_id": {"type": "integer"},
+        "finding_id": {"type": "string"},
+        "deep_link": {"type": ["string", "null"]}
+      }
+    },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "release"],
+      "properties": {
+        "name": {"type": "string"},
+        "release": {"type": "string"}
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "severity", "confidence", "title"],
+      "properties": {
+        "type": {"type": "string"},
+        "severity": {"type": ["string", "null"]},
+        "confidence": {"type": "string"},
+        "title": {"type": "string"}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "category", "source_status", "auditor_status", "suppressed", "last_modified"],
+      "properties": {
+        "domain": {"type": ["string", "null"]},
+        "category": {"type": ["string", "null"]},
+        "cwe": {"type": ["string", "null"]},
+        "source_status": {"type": ["string", "null"]},
+        "auditor_status": {"type": ["string", "null"]},
+        "suppressed": {"type": ["boolean", "null"]},
+        "last_modified": {"type": ["string", "null"]},
+        "file_path": {"type": ["string", "null"]},
+        "line": {"type": ["integer", "null"]},
+        "component_name": {"type": ["string", "null"]},
+        "component_version": {"type": ["string", "null"]},
+        "component_purl": {"type": ["string", "null"]},
+        "advisory_ids": {"type": "array", "items": {"type": "string"}},
+        "summary": {"type": ["string", "null"]},
+        "explanation": {"type": ["string", "null"]},
+        "recommendation": {"type": ["string", "null"]},
+        "traces": {"type": "array"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classifications"],
+      "properties": {
+        "classifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "version", "matched"],
+            "properties": {
+              "id": {"type": "string"},
+              "version": {"type": ["string", "null"]},
+              "matched": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "collection_id",
+        "collector_version",
+        "processor_version",
+        "signal_rule_id",
+        "signal_rule_version",
+        "signal_schema_version"
+      ],
+      "properties": {
+        "collection_id": {"type": "string"},
+        "collector_version": {"type": ["string", "null"]},
+        "processor_version": {"type": "string"},
+        "signal_rule_id": {"type": "string"},
+        "signal_rule_version": {"type": "string"},
+        "signal_schema_version": {"const": "1.0"}
+      }
+    }
+  }
+}

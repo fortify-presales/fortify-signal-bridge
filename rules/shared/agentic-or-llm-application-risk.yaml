@@ -1,0 +1,18 @@
+id: agentic-or-llm-application-risk
+version: "1"
+description: Emit critical or high findings in an LLM application or AI agent.
+enabled: true
+platforms: [fod, ssc]
+when:
+  all:
+    - field: finding.ai_application_type
+      in: ["LLM Application", "AI Agent"]
+    - field: finding.severity
+      in: [Critical, High]
+    - field: finding.suppressed
+      equals: false
+emit:
+  type: agentic-or-llm-application-risk
+  confidence: high
+  severity_from: finding.severity
+  title: High-severity finding in an LLM or agent application

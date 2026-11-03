@@ -17,7 +17,13 @@ RELEASE_FILTERS="${RELEASE_FILTERS:-}"
 SOURCE_INSTANCE_ID="${SOURCE_INSTANCE_ID:-}"
 FCLI_LOG_LEVEL="${FCLI_LOG_LEVEL:-}"
 ACTION_PUBKEY="${ACTION_PUBKEY:-}"
-FOD_SCOPES="${FOD_SCOPES:-api-tenant}"
+FOD_SCOPES="${FOD_SCOPES:-view-apps,view-issues}"
+FORTIFY_PLATFORM="${FORTIFY_PLATFORM:-fod}"
+RUN_MODE="${RUN_MODE:-}"
+RELEASE_IDS="${RELEASE_IDS:-}"
+DETAIL_LEVEL="${DETAIL_LEVEL:-summary}"
+ISSUE_PAGE_SIZE="${ISSUE_PAGE_SIZE:-50}"
+SSC_SOCKET_TIMEOUT="${SSC_SOCKET_TIMEOUT:-15m}"
 FOD_SESSION="collector"
 
 log() { printf '%s [collector] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
@@ -37,14 +43,60 @@ read_secret() {
   printf '%s' "$value"
 }
 
+[[ "$FORTIFY_PLATFORM" == "fod" || "$FORTIFY_PLATFORM" == "ssc" ]] || fail "FORTIFY_PLATFORM must be fod or ssc"
+[[ "$DETAIL_LEVEL" == "summary" || "$DETAIL_LEVEL" == "standard" || "$DETAIL_LEVEL" == "full" ]] || fail "DETAIL_LEVEL must be summary, standard, or full"
+[[ "$ISSUE_PAGE_SIZE" =~ ^[0-9]+$ && "$ISSUE_PAGE_SIZE" -ge 1 && "$ISSUE_PAGE_SIZE" -le 200 ]] || fail "ISSUE_PAGE_SIZE must be an integer between 1 and 200"
+[[ "$SSC_SOCKET_TIMEOUT" =~ ^[0-9]+[smh]$ ]] || fail "SSC_SOCKET_TIMEOUT must be a duration like 30s, 15m, or 1h"
+if [[ -n "$RUN_MODE" ]]; then
+  case "$RUN_MODE" in
+    incremental|full|targeted) ;;
+    *) fail "RUN_MODE must be incremental, full, or targeted" ;;
+  esac
+fi
+if [[ "$RUN_MODE" == "full" ]]; then
+  WINDOW_DAYS=full
+elif [[ "$RUN_MODE" == "incremental" && "$WINDOW_DAYS" == "full" ]]; then
+  fail "RUN_MODE=incremental requires WINDOW_DAYS between 0 and 30"
+fi
+if [[ -n "$RELEASE_IDS" && "$RUN_MODE" != "targeted" && -n "$RUN_MODE" ]]; then
+  fail "RELEASE_IDS is only valid with RUN_MODE=targeted"
+fi
+if [[ "$RUN_MODE" == "targeted" && -z "$RELEASE_IDS" ]]; then
+  fail "RUN_MODE=targeted requires RELEASE_IDS"
+fi
+if [[ -n "$RELEASE_IDS" ]]; then
+  [[ -z "$RELEASE_FILTERS" && -z "${RELEASE_QUERY:-}" && -z "${APPLICATION_QUERY:-}" && -z "${APPLICATION_ATTRIBUTES:-}" ]] \
+    || fail "RELEASE_IDS cannot be combined with release or application filters"
+fi
+if [[ "$FORTIFY_PLATFORM" == "ssc" ]]; then
+  [[ -z "$RELEASE_FILTERS" && -z "${APPLICATION_ATTRIBUTES:-}" ]] || fail "RELEASE_FILTERS and APPLICATION_ATTRIBUTES are FoD settings"
+  [[ -z "${FOD_URL:-}${FOD_URL_FILE:-}" ]] || fail "FOD_URL is not valid when FORTIFY_PLATFORM=ssc"
+else
+  [[ -z "${SSC_URL:-}${SSC_URL_FILE:-}" ]] || fail "SSC_URL is not valid when FORTIFY_PLATFORM=fod"
+fi
+
 FOD_URL="$(read_secret FOD_URL)"
 FOD_CLIENT_ID="$(read_secret FOD_CLIENT_ID)"
 FOD_CLIENT_SECRET="$(read_secret FOD_CLIENT_SECRET)"
 FOD_TENANT="$(read_secret FOD_TENANT)"
 FOD_USER="$(read_secret FOD_USER)"
 FOD_PAT="$(read_secret FOD_PAT)"
+SSC_URL="$(read_secret SSC_URL)"
+SSC_TOKEN="$(read_secret SSC_TOKEN)"
+SSC_USER="$(read_secret SSC_USER)"
+SSC_PASSWORD="$(read_secret SSC_PASSWORD)"
 
-[[ "$FOD_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]] || fail "FOD_URL must be an https:// base URL"
+if [[ "$FORTIFY_PLATFORM" == "fod" ]]; then
+  [[ "$FOD_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/?$ ]] || fail "FOD_URL must be an https:// base URL"
+else
+  [[ "$SSC_URL" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~/-]*)?$ ]] || fail "SSC_URL must be an https:// URL"
+  if [[ -n "$RELEASE_IDS" ]]; then
+    [[ "$RELEASE_IDS" =~ ^[^,]+(,[^,]+)*$ ]] || fail "RELEASE_IDS must be a comma-separated list"
+  fi
+fi
+if [[ "$FORTIFY_PLATFORM" == "fod" && -n "$RELEASE_IDS" ]]; then
+  [[ "$RELEASE_IDS" =~ ^[0-9]+(,[0-9]+)*$ ]] || fail "FoD RELEASE_IDS must be numeric release ids"
+fi
 if [[ "$WINDOW_DAYS" == "full" ]]; then
   WINDOW_ARGS=()
 elif [[ "$WINDOW_DAYS" =~ ^[0-9]+$ ]] && (( WINDOW_DAYS <= 30 )); then
@@ -80,25 +132,50 @@ fi
 action_hash() { awk -v f="$1" '$2 == f || $2 == "*"f {print $1}' "${COLLECTOR_HOME}/actions.sha256"; }
 
 export FCLI_USER_HOME="${FCLI_USER_HOME_OVERRIDE:-$(mktemp -d /tmp/fcli-home.XXXXXX)}"
-RUN_ID="$(cat /proc/sys/kernel/random/uuid)"
+if [[ -r /proc/sys/kernel/random/uuid ]]; then
+  RUN_ID="$(cat /proc/sys/kernel/random/uuid)"
+else
+  RUN_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+fi
 RUN_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 RUN_NAME="$(date -u +%Y%m%dT%H%M%SZ)-${RUN_ID}"
-mkdir -p "${OUTPUT_DIR}/fod"
-WORK_DIR="${OUTPUT_DIR}/fod/.partial-${RUN_NAME}"
-FINAL_DIR="${OUTPUT_DIR}/fod/${RUN_NAME}"
+mkdir -p "${OUTPUT_DIR}/${FORTIFY_PLATFORM}"
+WORK_DIR="${OUTPUT_DIR}/${FORTIFY_PLATFORM}/.partial-${RUN_NAME}"
+FINAL_DIR="${OUTPUT_DIR}/${FORTIFY_PLATFORM}/${RUN_NAME}"
 mkdir "$WORK_DIR"
 STATUS_FILE="$(mktemp /tmp/collector-status.XXXXXX)"
 
 cleanup() {
-  fcli fod session logout --fod-session "$FOD_SESSION" >/dev/null 2>&1 || true
+  if [[ "$FORTIFY_PLATFORM" == "ssc" ]]; then
+    fcli ssc session logout --ssc-session "$FOD_SESSION" >/dev/null 2>&1 || true
+  else
+    fcli fod session logout --fod-session "$FOD_SESSION" >/dev/null 2>&1 || true
+  fi
   rm -rf "$FCLI_USER_HOME" "$STATUS_FILE"
   # Only present if the run aborted before the final rename.
   rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
 
-log "Run ${RUN_ID}: collectors=${COLLECTORS} window=${WINDOW_DAYS}"
-if [[ -n "$FOD_CLIENT_ID" ]]; then
+log "Run ${RUN_ID}: platform=${FORTIFY_PLATFORM} collectors=${COLLECTORS} window=${WINDOW_DAYS}"
+if [[ "$FORTIFY_PLATFORM" == "ssc" ]]; then
+  if [[ -n "$SSC_TOKEN" ]]; then
+    # Pass the secret read from SSC_TOKEN or SSC_TOKEN_FILE. A bare --token is empty in
+    # a non-interactive container. ScanCentral is not used here.
+    env -u FCLI_DEFAULT_SSC_TOKEN fcli ssc session login --url "$SSC_URL" \
+      --token "$SSC_TOKEN" --socket-timeout "$SSC_SOCKET_TIMEOUT" \
+      --disable sc-sast,sc-dast --ssc-session "$FOD_SESSION" >/dev/null \
+      || fail "SSC login failed"
+  elif [[ -n "$SSC_USER" ]]; then
+    [[ -n "$SSC_PASSWORD" ]] || fail "SSC_PASSWORD is required with SSC_USER"
+    FCLI_DEFAULT_SSC_PASSWORD="$SSC_PASSWORD" fcli ssc session login --url "$SSC_URL" \
+      --user "$SSC_USER" --socket-timeout "$SSC_SOCKET_TIMEOUT" \
+      --disable sc-sast,sc-dast --ssc-session "$FOD_SESSION" >/dev/null \
+      || fail "SSC login failed"
+  else
+    fail "Provide SSC_TOKEN or SSC_USER/SSC_PASSWORD"
+  fi
+elif [[ -n "$FOD_CLIENT_ID" ]]; then
   [[ -n "$FOD_CLIENT_SECRET" ]] || fail "FOD_CLIENT_SECRET is required with FOD_CLIENT_ID"
   FCLI_DEFAULT_FOD_CLIENT_SECRET="$FOD_CLIENT_SECRET" fcli fod session login --url "$FOD_URL" \
     --client-id "$FOD_CLIENT_ID" --scopes "$FOD_SCOPES" --fod-session "$FOD_SESSION" >/dev/null \
@@ -111,14 +188,22 @@ elif [[ -n "$FOD_USER" ]]; then
 else
   fail "Provide FOD_CLIENT_ID/FOD_CLIENT_SECRET or FOD_TENANT/FOD_USER/FOD_PAT"
 fi
-unset FOD_CLIENT_SECRET FOD_PAT
+unset FOD_CLIENT_SECRET FOD_PAT SSC_TOKEN SSC_PASSWORD
 
 COMMON_ARGS=()
 [[ -n "$SOURCE_INSTANCE_ID" ]] && COMMON_ARGS+=(--source-instance "$SOURCE_INSTANCE_ID")
 
 # Resolve the release scope once so every collector uses the same release set.
 SCOPE_ARGS=()
-if [[ -n "$RELEASE_FILTERS" || -n "$COLLECTOR_RELEASE_QUERY" || -n "$COLLECTOR_APPLICATION_QUERY" ]]; then
+if [[ -n "$RELEASE_IDS" && "$FORTIFY_PLATFORM" == "fod" ]]; then
+  scope_cmd=(fcli fod release list --fod-session "$FOD_SESSION" --store collector_scope -q "{${RELEASE_IDS}}.contains(releaseId)" -o 'expr={releaseId}\n')
+  scope_count="$("${scope_cmd[@]}" | grep -c . || true)"
+  (( scope_count > 0 )) || fail "Release selection resolved to zero releases"
+  log "Release selection resolved to ${scope_count} releases"
+  SCOPE_ARGS=(--scope-var collector_scope)
+elif [[ -n "$RELEASE_IDS" ]]; then
+  SCOPE_ARGS=(--release-ids "$RELEASE_IDS")
+elif [[ "$FORTIFY_PLATFORM" == "fod" && ( -n "$RELEASE_FILTERS" || -n "$COLLECTOR_RELEASE_QUERY" || -n "$COLLECTOR_APPLICATION_QUERY" ) ]]; then
   release_query="$COLLECTOR_RELEASE_QUERY"
   if [[ -n "$COLLECTOR_APPLICATION_QUERY" ]]; then
     fcli fod app list --fod-session "$FOD_SESSION" --store collector_scope_apps -o 'expr={applicationId}\n' >/dev/null || fail "Listing applications failed"
@@ -139,6 +224,9 @@ if [[ -n "$RELEASE_FILTERS" || -n "$COLLECTOR_RELEASE_QUERY" || -n "$COLLECTOR_A
   [[ -n "$RELEASE_FILTERS" ]] && SCOPE_ARGS+=(--release-filters "$RELEASE_FILTERS")
   [[ -n "$COLLECTOR_RELEASE_QUERY" ]] && SCOPE_ARGS+=(--release-query "$COLLECTOR_RELEASE_QUERY")
   [[ -n "$COLLECTOR_APPLICATION_QUERY" ]] && SCOPE_ARGS+=(--application-query "$COLLECTOR_APPLICATION_QUERY")
+elif [[ "$FORTIFY_PLATFORM" == "ssc" ]]; then
+  [[ -n "$COLLECTOR_RELEASE_QUERY" ]] && SCOPE_ARGS+=(--release-query "$COLLECTOR_RELEASE_QUERY")
+  [[ -n "$COLLECTOR_APPLICATION_QUERY" ]] && SCOPE_ARGS+=(--application-query "$COLLECTOR_APPLICATION_QUERY")
 fi
 
 run_action() {
@@ -146,8 +234,10 @@ run_action() {
   local log_args=()
   [[ -n "$FCLI_LOG_LEVEL" ]] && log_args=(--log-level "$FCLI_LOG_LEVEL" --log-file "${WORK_DIR}/logs/${collector}.log")
   [[ -n "$FCLI_LOG_LEVEL" ]] && mkdir -p "${WORK_DIR}/logs"
-  fcli fod action run "${ACTIONS_DIR}/${action}" "${SIGNATURE_ARGS[@]}" --progress=stderr \
-    --fod-session "$FOD_SESSION" "${log_args[@]}" --action-sha256 "$(action_hash "$action")" "$@"
+  local session_flag="--fod-session"
+  [[ "$FORTIFY_PLATFORM" == "ssc" ]] && session_flag="--ssc-session"
+  fcli "$FORTIFY_PLATFORM" action run "${ACTIONS_DIR}/${action}" "${SIGNATURE_ARGS[@]}" --progress=stderr \
+    "$session_flag" "$FOD_SESSION" ${log_args[@]+"${log_args[@]}"} --action-sha256 "$(action_hash "$action")" "$@"
 }
 
 overall=0
@@ -164,13 +254,21 @@ for collector in ${COLLECTORS//,/ }; do
   case "$collector" in
     inventory)
       inv_args=()
-      [[ "$INVENTORY_MODE" == "window" ]] && inv_args=("${WINDOW_ARGS[@]}")
-      run_action inventory fod-export-inventory.fcli "${COMMON_ARGS[@]}" "${SCOPE_ARGS[@]}" "${inv_args[@]}" \
+      [[ "$INVENTORY_MODE" == "window" ]] && inv_args=(${WINDOW_ARGS[@]+"${WINDOW_ARGS[@]}"})
+      inv_action="fod-export-inventory.fcli"
+      [[ "$FORTIFY_PLATFORM" == "ssc" ]] && inv_action="ssc-export-inventory.fcli"
+      run_action inventory "$inv_action" ${COMMON_ARGS[@]+"${COMMON_ARGS[@]}"} ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} ${inv_args[@]+"${inv_args[@]}"} \
         --applications-file "${WORK_DIR}/applications.json" --releases-file "${WORK_DIR}/releases.json" || code=$?
       record inventory "$code" "$started" "applications.json,releases.json"
       ;;
     findings)
-      run_action findings fod-export-findings.fcli "${COMMON_ARGS[@]}" "${SCOPE_ARGS[@]}" "${WINDOW_ARGS[@]}" \
+      find_action="fod-export-findings.fcli"
+      find_extra=()
+      if [[ "$FORTIFY_PLATFORM" == "ssc" ]]; then
+        find_action="ssc-export-findings.fcli"
+        find_extra=(--detail-level "$DETAIL_LEVEL" --issue-page-size "$ISSUE_PAGE_SIZE")
+      fi
+      run_action findings "$find_action" ${COMMON_ARGS[@]+"${COMMON_ARGS[@]}"} ${SCOPE_ARGS[@]+"${SCOPE_ARGS[@]}"} ${WINDOW_ARGS[@]+"${WINDOW_ARGS[@]}"} ${find_extra[@]+"${find_extra[@]}"} \
         --scan-type "$SCAN_TYPE" --severities "$SEVERITIES" --file "${WORK_DIR}/findings.json" || code=$?
       record findings "$code" "$started" "findings.json"
       ;;
@@ -179,13 +277,16 @@ done
 
 SETTINGS_JSON="$(COLLECTORS="$COLLECTORS" WINDOW_DAYS="$WINDOW_DAYS" INVENTORY_MODE="$INVENTORY_MODE" SCAN_TYPE="$SCAN_TYPE" \
   SEVERITIES="$SEVERITIES" RELEASE_FILTERS="$RELEASE_FILTERS" SOURCE_INSTANCE_ID="$SOURCE_INSTANCE_ID" \
-  FOD_URL="$FOD_URL" \
+  FOD_URL="$FOD_URL" SSC_URL="$SSC_URL" FORTIFY_PLATFORM="$FORTIFY_PLATFORM" RUN_MODE="$RUN_MODE" \
   RELEASE_QUERY="$COLLECTOR_RELEASE_QUERY" APPLICATION_QUERY="$COLLECTOR_APPLICATION_QUERY" \
   CLASSIFIER_MODE="$COLLECTOR_CLASSIFIER_MODE" CLASSIFIERS="$COLLECTOR_CLASSIFIERS_JSON" \
-  python3 -c 'import json,os; k=["COLLECTORS","WINDOW_DAYS","INVENTORY_MODE","SCAN_TYPE","SEVERITIES","RELEASE_FILTERS","RELEASE_QUERY","APPLICATION_QUERY","SOURCE_INSTANCE_ID","CLASSIFIER_MODE","CLASSIFIERS","FOD_URL"]; print(json.dumps({x.lower(): (os.environ.get(x) or None) for x in k}))')"
+  ISSUE_PAGE_SIZE="$ISSUE_PAGE_SIZE" SSC_SOCKET_TIMEOUT="$SSC_SOCKET_TIMEOUT" \
+  python3 -c 'import json,os; k=["COLLECTORS","WINDOW_DAYS","INVENTORY_MODE","SCAN_TYPE","SEVERITIES","RELEASE_FILTERS","RELEASE_QUERY","APPLICATION_QUERY","SOURCE_INSTANCE_ID","CLASSIFIER_MODE","CLASSIFIERS","FOD_URL","SSC_URL","FORTIFY_PLATFORM","RUN_MODE","ISSUE_PAGE_SIZE","SSC_SOCKET_TIMEOUT"]; print(json.dumps({x.lower(): (os.environ.get(x) or None) for x in k}))')"
 python3 "${COLLECTOR_HOME}/bin/write_manifest.py" --run-dir "$WORK_DIR" --status-file "$STATUS_FILE" \
   --settings "$SETTINGS_JSON" --run-id "$RUN_ID" --started-at "$RUN_STARTED" \
-  --fcli-version "$(fcli --version | awk '{print $3}' | tr -d ,)" --collector-version "${COLLECTOR_VERSION:-}"
+  --fcli-version "$(fcli --version | awk '{print $3}' | tr -d ,)" --collector-version "${COLLECTOR_VERSION:-}" \
+  --source-platform "$FORTIFY_PLATFORM"
 mv "$WORK_DIR" "$FINAL_DIR"
+printf '%s\n' "$FINAL_DIR" > "${OUTPUT_DIR}/${FORTIFY_PLATFORM}/.last-run"
 log "Run ${RUN_ID} finished with status $([[ $overall == 0 ]] && echo succeeded || echo failed): ${FINAL_DIR}"
 exit "$overall"

@@ -4,7 +4,9 @@ This directory is the contract between the FoD collector container and downstrea
 
 | Version | Status | Contents |
 |---|---|---|
-| [v1.0](v1.0/) | Frozen | Initial schema. |
+| [v1.0](v1.0/) | Frozen | FoD collector documents. `source_platform` is `fod`. |
+| [v1.1](v1.1/) | Current for SSC | Same payload as 1.0, with `source_platform` `fod` or `ssc`, SSC collector ids, and `source_revision` on findings. FoD export stays on 1.0. |
+| [signal/v1.0](signal/v1.0/) | Current | `fortify.signal` events and the SignalBridge run manifest. |
 
 Validate output with `python tools/validate_output.py <run-dir>` (needs `pip install jsonschema`).
 
@@ -18,11 +20,14 @@ TBD
 
 ```
 <OUTPUT_DIR>/fod/<UTC yyyyMMddTHHmmssZ>-<run_id>/
+<OUTPUT_DIR>/ssc/<UTC yyyyMMddTHHmmssZ>-<run_id>/
   manifest.json                 # written last; index of the run
   applications.json             # collection_type=applications
   releases.json                 # collection_type=releases
   findings.json                 # collection_type=findings
 ```
+
+FoD writes schema 1.0 under `fod/`. SSC writes schema 1.1 under `ssc/`. SignalBridge writes `<OUTPUT_DIR>/signals/<platform>/complete/<collection-id>/` or `failed/` and does not move the collector directory. `<platform>` is `fod` or `ssc`.
 
 Runs are written to `.partial-<name>` and renamed when complete. **Only read directories whose name does not start with `.`** and that contain `manifest.json`. A failed collector is listed in the manifest with `status: failed`; its files may be missing.
 

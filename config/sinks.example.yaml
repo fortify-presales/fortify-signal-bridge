@@ -1,0 +1,19 @@
+# Documentation only. Runtime sinks are selected with the SINKS environment variable.
+# Secret values belong in files referenced by *_FILE variables, not in this file.
+sinks:
+  - id: json
+    description: One fortify.signal JSON object per line.
+    path_env: JSON_OUTPUT_PATH
+  - id: stdout
+    description: Same NDJSON on standard output for local runs.
+  - id: crowdstrike
+    description: HTTPS POST of {"event": <signal>} batches. Retry 408, 429, and 5xx.
+    url_file: CROWDSTRIKE_HEC_URL_FILE
+    token_file: CROWDSTRIKE_HEC_TOKEN_FILE
+  - id: arcsight
+    description: >
+      CEF over syslog to an ArcSight 8.x Syslog NG Daemon or CEF Syslog SmartConnector.
+      TCP and RFC 5424 by default. Delivery means the socket write was flushed.
+      There is no application-level acknowledgement.
+    host_env: ARCSIGHT_HOST
+    port_env: ARCSIGHT_PORT

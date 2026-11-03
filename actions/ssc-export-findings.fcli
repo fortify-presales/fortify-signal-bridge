@@ -1,0 +1,399 @@
+# yaml-language-server: $schema=https://fortify.github.io/fcli/schemas/action/fcli-action-schema-2.10.0.json
+author: Fortify
+usage:
+  header: Export SSC issues to fortify.collector JSON 1.1.
+  description: >-
+    Read-only export of visible and suppressed issues for selected application versions.
+    SSC engine type SCA is static analysis and is stored as finding domain SAST.
+    Finding domain SCA is used for Debricked open-source issues. A removed issue is not a resolution.
+config:
+  rest.target.default: ssc
+cli.options:
+  releaseIds:
+    names: --release-ids
+    description: Comma-separated application version ids or App:version names.
+    required: false
+  scopeVar:
+    names: --scope-var
+    description: fcli variable holding pre-resolved application version records.
+    required: false
+  releaseQuery:
+    names: --release-query
+    description: SpEL over application version records. Recorded and applied when listing versions.
+    required: false
+  applicationQuery:
+    names: --application-query
+    description: SpEL over application version records, combined with --release-query.
+    required: false
+  classifierMode:
+    names: --classifier-mode
+    description: tag adds classifications to every exported finding; filter exports only matching findings.
+    required: false
+    default: '${#env("COLLECTOR_CLASSIFIER_MODE") ?: "tag"}'
+  sourceInstance:
+    names: --source-instance
+    description: Stable identifier of this SSC instance.
+    required: false
+  scanType:
+    names: --scan-type
+    description: All, Static, Dynamic, or OpenSource. Static is SSC engine SCA.
+    required: false
+    default: All
+  severities:
+    names: --severities
+    description: Comma-separated friority values, or All.
+    required: false
+    default: Critical,High
+  windowDays:
+    names: --window-days
+    description: Keep issues whose foundDate or removedDate falls on one of the last N UTC days. Omit for a full list.
+    type: int
+    required: false
+    default: -1
+  detailLevel:
+    names: --detail-level
+    description: summary skips issue details. standard and full request --embed details.
+    required: false
+    default: summary
+  issuePageSize:
+    names: --issue-page-size
+    description: Maximum issues requested in one SSC call. A dropped response is retried for that page.
+    type: int
+    required: false
+    default: 50
+  actionHash:
+    names: --action-sha256
+    description: SHA256 of this action supplied by the trusted runner.
+    required: false
+  file:
+    names: --file
+    description: Output file for the findings collection.
+steps:
+  - if: ${!{'tag','filter'}.contains(cli.classifierMode)}
+    throw: Invalid classifier-mode; use tag or filter.
+  - if: ${!{'summary','standard','full'}.contains(cli.detailLevel)}
+    throw: Invalid detail-level; use summary, standard, or full.
+  - if: ${!{'All','Static','Dynamic','OpenSource'}.contains(cli.scanType)}
+    throw: SSC scan type must be All, Static, Dynamic, or OpenSource.
+  - if: ${cli.windowDays < -1 || cli.windowDays > 30}
+    throw: Invalid window-days; use a value between 0 and 30.
+  - if: ${cli.issuePageSize < 1 || cli.issuePageSize > 200}
+    throw: Invalid issue-page-size; use a value between 1 and 200.
+  - var.set:
+      started: '${#now().toString()}'
+      classifiers: ${{}}
+      findings: ${{}}
+      tags: ${{:}}
+      classifiedCount: 0
+      count: 0
+      days: ${{}}
+      versions: ${{}}
+      scopeIds: ${{}}
+      warnings: ${{}}
+      incremental: ${cli.windowDays >= 0}
+      severityValues: '${cli.severities == "All" ? {} : cli.severities.split(",")}'
+      windowStartDay: '${cli.windowDays >= 0 ? #now("-" + cli.windowDays + "d").toString().substring(0, 10) : null}'
+  - records.for-each:
+      from: ${severityValues}
+      record.var-name: selectedSeverity
+      do:
+        - if: ${!{'Critical','High','Medium','Low'}.contains(selectedSeverity)}
+          throw: Invalid severity selection; use Critical, High, Medium, Low, or All.
+  - if: ${cli.windowDays >= 0}
+    records.for-each:
+      from: ${{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30}}
+      record.var-name: offset
+      breakIf: ${offset > cli.windowDays}
+      do:
+        - var.set:
+            days..: '${#now("-" + offset + "d").toString().substring(0, 10)}'
+  - records.for-each:
+      from: ${{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49}}
+      record.var-name: ci
+      breakIf: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_ID") == null}'
+      do:
+        - var.set:
+            classifiers..: {fmt: classifierDef}
+  - if: '${cli.classifierMode == "filter" && classifiers.size() == 0}'
+    throw: Classifier mode filter requires at least one classifier.
+  - if: ${cli.scopeVar != null}
+    var.set:
+      versions: '${#var(cli.scopeVar)}'
+  - if: ${cli.releaseIds != null}
+    var.set:
+      releaseIdValues: '${cli.releaseIds.split(",")}'
+  - if: ${cli.releaseIds != null}
+    records.for-each:
+      from: ${releaseIdValues}
+      record.var-name: av
+      do:
+        - run.fcli:
+            oneVersion:
+              cmd: ssc appversion get "${av}" --embed attrValuesByName -o json
+              records.collect: true
+              on.success:
+                - var.set:
+                    versions..: ${oneVersion.records[0]}
+  - if: ${cli.scopeVar == null && cli.releaseIds == null}
+    do:
+      - var.set:
+          versionQuery: '${(cli.applicationQuery ?: "") + (cli.applicationQuery != null && cli.releaseQuery != null ? " && " : "") + (cli.releaseQuery ?: "")}'
+      - run.fcli:
+          versionList:
+            cmd: 'ssc appversion list --embed attrValuesByName --include active -o json --store collector_ssc_versions'
+            stdout: suppress
+  - if: ${cli.scopeVar == null && cli.releaseIds == null && versionQuery != ""}
+    run.fcli:
+      filteredVersions:
+        cmd: 'util variable contents collector_ssc_versions -q "${versionQuery}"'
+        records.collect: true
+        on.success:
+          - var.set:
+              versions: ${filteredVersions.records}
+  - if: ${cli.scopeVar == null && cli.releaseIds == null && versionQuery == ""}
+    var.set:
+      versions: '${#var("collector_ssc_versions")}'
+  - if: ${(cli.applicationQuery != null || cli.releaseQuery != null || cli.releaseIds != null) && (versions == null || versions.size() == 0)}
+    throw: Release selection resolved to zero application versions.
+  - records.for-each:
+      from: ${versions}
+      record.var-name: ver
+      do:
+        - var.set:
+            scopeIds..: ${ver.id.toString()}
+            embedArg: '${cli.detailLevel == "summary" ? "" : "--embed details"}'
+            moreIssues: true
+            issueStart: 1
+        - log.progress: 'Retrieving SSC issues for ${ver.application.name}:${ver.name} (${ver.id})'
+        # Each --fetch range is one server page. A full issue list is one response and
+        # SSC or its proxy closes that body early. A short page ends the version.
+        # 50 x 20 = 1000 pages. At the default page size that is 50000 issues.
+        - records.for-each:
+            from: ${{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49}}
+            record.var-name: issuePageBlock
+            breakIf: ${!moreIssues}
+            do:
+              - records.for-each:
+                  from: ${{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19}}
+                  record.var-name: issuePageInBlock
+                  breakIf: ${!moreIssues}
+                  do:
+                    - var.set:
+                        fetchRange: '${"" + issueStart + "-" + (issueStart + cli.issuePageSize - 1)}'
+                        pageOk: false
+                        pageCount: 0
+                    - log.progress: 'Retrieving SSC issues ${fetchRange} for ${ver.application.name}:${ver.name} (${ver.id})'
+                    - run.fcli:
+                        clearIssues:
+                          cmd: util variable delete collector_ssc_issues
+                          stdout: suppress
+                          stderr: suppress
+                          on.fail:
+                            - log.debug: No previous SSC issue page to clear
+                    - run.fcli:
+                        issueList:
+                          cmd: 'ssc issue list --av "${ver.id}" --include visible,suppressed ${embedArg} --fetch ${fetchRange} -o json --style array --store collector_ssc_issues'
+                          stdout: suppress
+                          on.success:
+                            - var.set:
+                                pageOk: true
+                                pageCount: '${(#var("collector_ssc_issues") ?: {}).size()}'
+                          # A truncated chunked body fails the page. Retry that page, then retry once more.
+                          on.fail:
+                            - log.warn: 'Retrying SSC issues ${fetchRange} for ${ver.application.name}:${ver.name} (${ver.id}) after ${lastException.type}'
+                            - sleep: 5000
+                            - run.fcli:
+                                issueListRetry:
+                                  cmd: 'ssc issue list --av "${ver.id}" --include visible,suppressed ${embedArg} --fetch ${fetchRange} -o json --style array --store collector_ssc_issues'
+                                  stdout: suppress
+                                  on.success:
+                                    - var.set:
+                                        pageOk: true
+                                        pageCount: '${(#var("collector_ssc_issues") ?: {}).size()}'
+                                  on.fail:
+                                    - log.warn: 'Retrying SSC issues ${fetchRange} for ${ver.application.name}:${ver.name} (${ver.id}) again after ${lastException.type}'
+                                    - sleep: 20000
+                                    - run.fcli:
+                                        issueListRetry2:
+                                          cmd: 'ssc issue list --av "${ver.id}" --include visible,suppressed ${embedArg} --fetch ${fetchRange} -o json --style array --store collector_ssc_issues'
+                                          stdout: suppress
+                                          on.success:
+                                            - var.set:
+                                                pageOk: true
+                                                pageCount: '${(#var("collector_ssc_issues") ?: {}).size()}'
+                    - if: ${!pageOk}
+                      throw: 'SSC issue list failed for ${ver.application.name}:${ver.name} (${ver.id}) range ${fetchRange}'
+                    - if: ${pageCount > 0}
+                      do:
+                        - records.for-each:
+                            from: ${classifiers}
+                            record.var-name: cls
+                            do:
+                              - run.fcli:
+                                  clsIssues:
+                                    cmd: 'util variable contents collector_ssc_issues -q "${cls.issueQuery}"'
+                                    records.for-each:
+                                      record.var-name: matched
+                                      do:
+                                        - var.set:
+                                            tagKey: ${"v" + ver.id + "i" + matched.id}
+                                            tags.${tagKey}: '${(tags[tagKey] ?: "") + "," + cls.id}'
+                        - records.for-each:
+                            from: '${#var("collector_ssc_issues")}'
+                            record.var-name: issue
+                            do:
+                              - var.set:
+                                  issueKey: ${"v" + ver.id + "i" + issue.id}
+                                  foundDay: '${issue.foundDate == null ? "" : issue.foundDate.substring(0, 10)}'
+                                  removedDay: '${issue.removedDate == null ? "" : issue.removedDate.substring(0, 10)}'
+                                  inWindow: '${!incremental || days.contains(foundDay) || days.contains(removedDay)}'
+                                  selected: '${(cli.scanType == "All" || (cli.scanType == "Static" && issue.engineType == "SCA") || (cli.scanType == "Dynamic" && issue.engineType == "WEBINSPECT") || (cli.scanType == "OpenSource" && issue.engineType == "DEBRICKED")) && (cli.severities == "All" || severityValues.contains(issue.friority))}'
+                              - if: ${inWindow && selected && (cli.classifierMode == "tag" || tags[issueKey] != null)}
+                                var.set:
+                                  currentVersion: ${ver}
+                                  issueClasses: '${tags[issueKey] == null ? {} : tags[issueKey].substring(1).split(",")}'
+                                  classifiedCount: '${classifiedCount + (tags[issueKey] == null ? 0 : 1)}'
+                                  findings..: {fmt: finding}
+                                  count: ${count + 1}
+                    - if: ${pageCount < cli.issuePageSize}
+                      var.set:
+                        moreIssues: false
+                    - if: ${moreIssues}
+                      var.set:
+                        issueStart: ${issueStart + cli.issuePageSize}
+        - if: ${moreIssues}
+          throw: 'SSC issue list for ${ver.application.name}:${ver.name} (${ver.id}) still returned a full page after ${issueStart - 1} issues. Narrow the collection with RELEASE_IDS.'
+  - var.set:
+      warnings..: Absence is not evidence of remediation. An SSC removedDate means the latest scan did not report the issue.
+  - if: ${cli.severities != 'All' || cli.scanType != 'All'}
+    var.set:
+      warnings..: Severity and scan-type selection limit coverage.
+  - if: ${incremental}
+    var.set:
+      warnings..: SSC incremental collection uses foundDate and removedDate calendar dates, not a FoD lastModifiedDate filter.
+  - if: '${cli.classifierMode == "filter"}'
+    var.set:
+      warnings..: Only findings matching at least one classifier are exported.
+  - var.set:
+      classifierRefs: ${{}}
+      windowObj: null
+  - records.for-each:
+      from: ${classifiers}
+      record.var-name: c
+      do:
+        - var.set:
+            classifierRefs..: {fmt: classifierRef}
+  - if: ${incremental}
+    var.set:
+      windowObj: {fmt: window}
+  - var.set:
+      selectionObj: {fmt: selection}
+  - out.write:
+      ${cli.file}: {fmt: export}
+formatters:
+  classifierDef:
+    index: ${ci}
+    id: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_ID")}'
+    version: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_VERSION")}'
+    title: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_TITLE")}'
+    sha256: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_SHA256")}'
+    issueQuery: '${#env("COLLECTOR_CLASSIFIER_" + ci + "_ISSUE_QUERY")}'
+  classifierRef:
+    id: ${c.id}
+    version: ${c.version}
+    title: ${c.title}
+    sha256: ${c.sha256}
+  window:
+    days: ${cli.windowDays}
+    start: '${windowStartDay + "T00:00:00Z"}'
+    end: ${started}
+    granularity: day
+  selection:
+    release_filters: null
+    release_query: '${cli.releaseQuery ?: null}'
+    application_query: '${cli.applicationQuery ?: null}'
+  finding:
+    source_finding_id: ${issue.id.toString()}
+    instance_id: ${issue.issueInstanceId}
+    source_url: ${issue._href}
+    application_id: ${currentVersion.application.id}
+    application_name: ${currentVersion.application.name}
+    ai_application_type: '${currentVersion.attrValuesByName != null && {"Non AI","LLM Application","AI Agent"}.contains(currentVersion.attrValuesByName["AI Application Type"]) ? currentVersion.attrValuesByName["AI Application Type"] : null}'
+    release_id: ${currentVersion.id}
+    release_name: ${currentVersion.name}
+    classifications: ${issueClasses}
+    scan_id: ${issue.lastScanId}
+    rule_id: ${issue.primaryRuleGuid}
+    finding_domain: '${issue.engineType == "SCA" ? "SAST" : (issue.engineType == "WEBINSPECT" ? "DAST" : (issue.engineType == "DEBRICKED" ? "SCA" : "UNKNOWN"))}'
+    source_scan_type: '${issue.engineType == "SCA" ? "Static" : (issue.engineType == "WEBINSPECT" ? "Dynamic" : (issue.engineType == "DEBRICKED" ? "OpenSource" : issue.engineType))}'
+    analyzer_name: ${issue.analyzer}
+    fortify_aviator: null
+    aviator_remediation_guidance_available: null
+    impact: ${issue.impact}
+    probability: ${issue.likelihood}
+    confidence: ${issue.confidence}
+    category: ${issue.issueName}
+    severity: ${issue.friority}
+    source_status: ${issue.scanStatus}
+    developer_status: null
+    auditor_status: '${issue.primaryTag ?: issue.issueStatus}'
+    suppressed: ${issue.suppressed}
+    exploited: null
+    malware: null
+    introduced_date: ${issue.foundDate}
+    closed_date: ${issue.removedDate}
+    last_modified_date: '${issue.lastModifiedDate ?: issue.foundDate}'
+    source_revision: ${issue.revision}
+    sca_provider: null
+    component_name: null
+    component_version: null
+    component_purl: null
+    advisory_ids: ${{}}
+    summary: ${issue.details?.summary}
+    explanation: '${cli.detailLevel == "full" ? issue.details?.explanation : null}'
+    recommendation: '${cli.detailLevel == "full" ? issue.details?.recommendation : null}'
+    file_path: ${issue.fullFileName}
+    line: '${issue.lineNumber != null && issue.lineNumber > 0 ? issue.lineNumber : null}'
+    traces: ${{}}
+  export:
+    schema_name: fortify.collector
+    schema_version: "1.1"
+    collection_type: findings
+    collection_id: '${#action.runID()}'
+    started_at: ${started}
+    completed_at: '${#now().toString()}'
+    source_platform: ssc
+    source_instance_id: ${cli.sourceInstance}
+    requested_scope: '${cli.releaseIds ?: "tenant"}'
+    release_filters: null
+    selection: ${selectionObj}
+    resolved_scope_ids: ${scopeIds}
+    window: ${windowObj}
+    producer:
+      kind: fcli
+      name: fcli
+      version: '${#fcliBuildProperties().fcliVersion}'
+      collector_id: fortify.ssc.findings
+      collector_version: "1.0"
+      collector_sha256: ${cli.actionHash}
+    coverage:
+      retrieval_complete: true
+      details_complete: ${cli.detailLevel != "summary"}
+      coverage_mode: '${incremental ? "incremental" : (cli.severities == "All" && cli.scanType == "All" && cli.releaseIds == null && cli.applicationQuery == null && cli.releaseQuery == null && cli.classifierMode == "tag" ? "full-snapshot" : "filtered-snapshot")}'
+      snapshot_consistent: false
+      authoritative_for_lifecycle: false
+      fetched_count: ${count}
+      capabilities:
+        - classifications
+      warnings: ${warnings}
+    classification:
+      mode: ${cli.classifierMode}
+      classifiers: ${classifierRefs}
+      matched_count: ${classifiedCount}
+    scan_type: ${cli.scanType}
+    severities: ${severityValues}
+    modified_since: null
+    scope: null
+    profile: all-findings
+    profile_version: "1"
+    findings: ${findings}

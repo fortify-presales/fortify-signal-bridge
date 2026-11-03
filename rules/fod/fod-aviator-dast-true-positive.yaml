@@ -1,0 +1,18 @@
+id: fod-aviator-dast-true-positive
+version: "1"
+description: Emit confirmed critical DAST findings identified by Aviator.
+enabled: true
+platforms: [fod]
+when:
+  all:
+    - classification: fod-aviator-dast-true-positive
+      equals: true
+    - field: finding.severity
+      in: [Critical]
+    - field: finding.suppressed
+      equals: false
+emit:
+  type: aviator-confirmed-dast
+  confidence: high
+  severity_from: finding.severity
+  title: Confirmed critical DAST finding

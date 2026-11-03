@@ -1,0 +1,228 @@
+# yaml-language-server: $schema=https://fortify.github.io/fcli/schemas/action/fcli-action-schema-2.10.0.json
+author: Fortify
+usage:
+  header: Export SSC applications and application versions to fortify.collector JSON 1.1.
+  description: >-
+    Read-only export. An SSC application version is written as a release. FoD-only inventory fields are null.
+    Removed issues are not a lifecycle authority.
+config:
+  rest.target.default: ssc
+cli.options:
+  releaseQuery:
+    names: --release-query
+    description: SpEL over SSC application version records. Recorded and applied when no --scope-var is set.
+    required: false
+  applicationQuery:
+    names: --application-query
+    description: SpEL over SSC application version records, combined with --release-query.
+    required: false
+  scopeVar:
+    names: --scope-var
+    description: fcli variable holding pre-resolved application version records.
+    required: false
+  releaseIds:
+    names: --release-ids
+    description: Comma-separated application version ids or App:version names.
+    required: false
+  windowDays:
+    names: --window-days
+    description: Accepted for runner compatibility. SSC inventory is not windowed in this action.
+    type: int
+    required: false
+    default: -1
+  sourceInstance:
+    names: --source-instance
+    description: Stable identifier of this SSC instance.
+    required: false
+  actionHash:
+    names: --action-sha256
+    description: SHA256 of this action supplied by the trusted runner.
+    required: false
+  applicationsFile:
+    names: --applications-file
+    description: Output file for the applications collection.
+  releasesFile:
+    names: --releases-file
+    description: Output file for the releases collection.
+steps:
+  - if: ${cli.windowDays < -1 || cli.windowDays > 30}
+    throw: Invalid window-days; use a value between 0 and 30.
+  - var.set:
+      started: '${#now().toString()}'
+      applications: ${{}}
+      releases: ${{}}
+      scopeIds: ${{}}
+      versions: ${{}}
+      appCount: 0
+      relCount: 0
+      seenApps: ${{:}}
+  - if: ${cli.scopeVar != null}
+    var.set:
+      versions: '${#var(cli.scopeVar)}'
+  - if: ${cli.releaseIds != null}
+    do:
+      - var.set:
+          versions: ${{}}
+          releaseIdValues: '${cli.releaseIds.split(",")}'
+      - records.for-each:
+          from: ${releaseIdValues}
+          record.var-name: av
+          do:
+            - run.fcli:
+                oneVersion:
+                  cmd: ssc appversion get "${av}" -o json
+                  records.collect: true
+                  on.success:
+                    - var.set:
+                        versions..: ${oneVersion.records[0]}
+  - if: ${cli.scopeVar == null && cli.releaseIds == null}
+    do:
+      - run.fcli:
+          versionList:
+            cmd: ssc appversion list --embed attrValuesByName --include active -o json --store collector_ssc_versions
+            stdout: suppress
+      - var.set:
+          versionQuery: '${(cli.applicationQuery ?: "") + (cli.applicationQuery != null && cli.releaseQuery != null ? " && " : "") + (cli.releaseQuery ?: "")}'
+  - if: ${cli.scopeVar == null && cli.releaseIds == null && versionQuery != ""}
+    run.fcli:
+      filteredVersions:
+        cmd: 'util variable contents collector_ssc_versions -q "${versionQuery}"'
+        records.collect: true
+        on.success:
+          - var.set:
+              versions: ${filteredVersions.records}
+  - if: ${cli.scopeVar == null && cli.releaseIds == null && versionQuery == ""}
+    var.set:
+      versions: '${#var("collector_ssc_versions")}'
+  - if: ${(cli.applicationQuery != null || cli.releaseQuery != null || cli.releaseIds != null) && (versions == null || versions.size() == 0)}
+    throw: Release selection resolved to zero application versions.
+  - records.for-each:
+      from: ${versions}
+      record.var-name: ver
+      do:
+        - var.set:
+            releases..: {fmt: release}
+            scopeIds..: ${ver.id.toString()}
+            relCount: ${relCount + 1}
+        - if: ${seenApps["a" + ver.application.id] == null}
+          var.set:
+            seenApps.${"a" + ver.application.id}: true
+            applications..: {fmt: application}
+            appCount: ${appCount + 1}
+  - log.progress: Exported ${appCount} applications and ${relCount} application versions
+  - var.set:
+      selectionObj: {fmt: selection}
+  - out.write:
+      ${cli.applicationsFile}: {fmt: applicationsExport}
+      ${cli.releasesFile}: {fmt: releasesExport}
+formatters:
+  selection:
+    release_filters: null
+    release_query: '${cli.releaseQuery ?: null}'
+    application_query: '${cli.applicationQuery ?: null}'
+  application:
+    application_id: ${ver.application.id}
+    application_name: ${ver.application.name}
+    application_description: null
+    application_type: null
+    business_criticality: null
+    created_date: null
+    has_microservices: null
+    ai_application_type: '${ver.attrValuesByName != null && {"Non AI","LLM Application","AI Agent"}.contains(ver.attrValuesByName["AI Application Type"]) ? ver.attrValuesByName["AI Application Type"] : null}'
+    attributes: ${{}}
+    source_url: ${ver.application._href}
+  release:
+    release_id: ${ver.id}
+    release_name: ${ver.name}
+    release_description: ${ver.description}
+    application_id: ${ver.application.id}
+    application_name: ${ver.application.name}
+    microservice_id: null
+    microservice_name: null
+    sdlc_status: null
+    suspended: '${ver.active == null ? null : !ver.active}'
+    created_date: ${ver.creationDate}
+    star_rating: null
+    is_passed: null
+    pass_fail_reason: null
+    analysis_status: null
+    current_static_scan_id: null
+    current_dynamic_scan_id: null
+    current_mobile_scan_id: null
+    static_scan_date: null
+    dynamic_scan_date: null
+    mobile_scan_date: null
+    issue_count: ${ver.issueCount}
+    issue_counts:
+      critical: null
+      high: null
+      medium: null
+      low: null
+    attributes: ${{}}
+    source_url: ${ver._href}
+  applicationsExport:
+    schema_name: fortify.collector
+    schema_version: "1.1"
+    collection_type: applications
+    collection_id: '${#action.runID()}'
+    started_at: ${started}
+    completed_at: '${#now().toString()}'
+    source_platform: ssc
+    source_instance_id: ${cli.sourceInstance}
+    requested_scope: tenant
+    release_filters: null
+    selection: ${selectionObj}
+    resolved_scope_ids: ${{}}
+    window: null
+    producer:
+      kind: fcli
+      name: fcli
+      version: '${#fcliBuildProperties().fcliVersion}'
+      collector_id: fortify.ssc.applications
+      collector_version: "1.0"
+      collector_sha256: ${cli.actionHash}
+    coverage:
+      retrieval_complete: true
+      details_complete: true
+      coverage_mode: '${cli.releaseIds != null || cli.applicationQuery != null || cli.releaseQuery != null || cli.scopeVar != null ? "filtered-snapshot" : "full-snapshot"}'
+      snapshot_consistent: false
+      authoritative_for_lifecycle: false
+      fetched_count: ${appCount}
+      capabilities:
+        - application-attributes
+      warnings:
+        - SSC applications are derived from the selected application versions. Absence is not deletion.
+    applications: ${applications}
+  releasesExport:
+    schema_name: fortify.collector
+    schema_version: "1.1"
+    collection_type: releases
+    collection_id: '${#action.runID()}'
+    started_at: ${started}
+    completed_at: '${#now().toString()}'
+    source_platform: ssc
+    source_instance_id: ${cli.sourceInstance}
+    requested_scope: tenant
+    release_filters: null
+    selection: ${selectionObj}
+    resolved_scope_ids: ${scopeIds}
+    window: null
+    producer:
+      kind: fcli
+      name: fcli
+      version: '${#fcliBuildProperties().fcliVersion}'
+      collector_id: fortify.ssc.releases
+      collector_version: "1.0"
+      collector_sha256: ${cli.actionHash}
+    coverage:
+      retrieval_complete: true
+      details_complete: false
+      coverage_mode: '${cli.releaseIds != null || cli.applicationQuery != null || cli.releaseQuery != null || cli.scopeVar != null ? "filtered-snapshot" : "full-snapshot"}'
+      snapshot_consistent: false
+      authoritative_for_lifecycle: false
+      fetched_count: ${relCount}
+      capabilities:
+        - release-attributes
+      warnings:
+        - An SSC application version is exported as a release. FoD scan and rating fields are null. Absence is not retirement.
+    releases: ${releases}

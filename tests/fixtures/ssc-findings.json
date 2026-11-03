@@ -1,0 +1,314 @@
+{
+  "schema_name": "fortify.collector",
+  "schema_version": "1.1",
+  "collection_type": "findings",
+  "collection_id": "6a1f0c52-8a3e-4c1f-9f55-0f2a5f1d9b10",
+  "started_at": "2026-11-02T06:00:04.112Z",
+  "completed_at": "2026-11-02T06:03:41.870Z",
+  "source_platform": "ssc",
+  "source_instance_id": "ssc-cyberres-stage",
+  "requested_scope": "tenant",
+  "release_filters": "sdlcStatusType:Production|QA",
+  "selection": {
+    "release_filters": "sdlcStatusType:Production|QA",
+    "release_query": null,
+    "application_query": "attributes.?[name == 'Business Unit' && {'Payments'}.contains(value)].size() > 0"
+  },
+  "resolved_scope_ids": [
+    "1001",
+    "1002"
+  ],
+  "window": {
+    "days": 2,
+    "start": "2026-10-31T00:00:00Z",
+    "end": "2026-11-02T06:00:04.112Z",
+    "granularity": "day"
+  },
+  "producer": {
+    "kind": "fcli",
+    "name": "fcli",
+    "version": "3.29.0",
+    "collector_id": "fortify.ssc.findings",
+    "collector_version": "1.0",
+    "collector_sha256": "3b9c2f6f1d8a4e0c7b5a29e1f0d6c4b8a7e3f2d1c0b9a8f7e6d5c4b3a2f1e0d9"
+  },
+  "coverage": {
+    "retrieval_complete": true,
+    "details_complete": true,
+    "coverage_mode": "incremental",
+    "snapshot_consistent": false,
+    "authoritative_for_lifecycle": false,
+    "fetched_count": 4,
+    "capabilities": [
+      "finding-details",
+      "finding-traces",
+      "classifications"
+    ],
+    "warnings": [
+      "Absence is not evidence of remediation. Sensitive HTTP request/response data is not exported.",
+      "Severity and scan-type selection limit coverage.",
+      "Release filters limit coverage to the resolved_scope_ids."
+    ]
+  },
+  "classification": {
+    "mode": "tag",
+    "matched_count": 3,
+    "classifiers": [
+      {
+        "id": "ssc-reintroduced",
+        "version": 1,
+        "title": "reintroduced",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      {
+        "id": "ssc-debricked",
+        "version": 1,
+        "title": "debricked",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      {
+        "id": "ssc-correlated",
+        "version": 1,
+        "title": "correlated",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ]
+  },
+  "scan_type": "All",
+  "severities": [
+    "Critical",
+    "High"
+  ],
+  "modified_since": null,
+  "scope": null,
+  "profile": "all-findings",
+  "profile_version": "1",
+  "findings": [
+    {
+      "source_finding_id": "2499",
+      "instance_id": "8F1C2B3A4D5E6F708192A3B4C5D6E7F8",
+      "source_url": "https://ams.fortify.com/Redirect/Issues/a3c9e1f2-5b7d-4e8a-9c0b-1d2e3f4a5b6c",
+      "application_id": 501,
+      "application_name": "Payments",
+      "ai_application_type": "AI Agent",
+      "release_id": 1001,
+      "release_name": "2026.11",
+      "classifications": [
+        "ssc-reintroduced"
+      ],
+      "scan_id": 77012,
+      "rule_id": "C1D2E3F4-0000-1111-2222-333344445555",
+      "finding_domain": "SAST",
+      "source_scan_type": "Static",
+      "analyzer_name": "dataflow",
+      "fortify_aviator": null,
+      "aviator_remediation_guidance_available": null,
+      "impact": 5.0,
+      "probability": 4.0,
+      "confidence": 5.0,
+      "category": "SQL Injection",
+      "severity": "Critical",
+      "source_status": "REINTRODUCED",
+      "developer_status": null,
+      "auditor_status": "Remediation Required",
+      "suppressed": false,
+      "exploited": null,
+      "malware": null,
+      "introduced_date": "2026-09-14T10:22:31",
+      "closed_date": null,
+      "last_modified_date": "2026-11-01T15:40:12",
+      "sca_provider": null,
+      "component_name": null,
+      "component_version": null,
+      "component_purl": null,
+      "advisory_ids": [],
+      "summary": "User input reaches a SQL query without validation.",
+      "explanation": "Constructing a dynamic SQL statement with input from an untrusted source might allow an attacker to modify the statement's meaning.",
+      "recommendation": "Use parameterized queries.",
+      "file_path": "src/main/java/com/example/OrderDao.java",
+      "line": 88,
+      "traces": [
+        {
+          "file_path": "src/main/java/com/example/OrderController.java",
+          "line": 42,
+          "message": "getParameter(return)"
+        },
+        {
+          "file_path": "src/main/java/com/example/OrderDao.java",
+          "line": 88,
+          "message": "executeQuery(0)"
+        }
+      ],
+      "source_revision": 3
+    },
+    {
+      "source_finding_id": "3001",
+      "instance_id": "8F1C2B3A4D5E6F708192A3B4C5D6E7F8",
+      "source_url": "https://ams.fortify.com/Redirect/Issues/a3c9e1f2-5b7d-4e8a-9c0b-1d2e3f4a5b6c",
+      "application_id": 501,
+      "application_name": "Payments",
+      "ai_application_type": null,
+      "release_id": 1001,
+      "release_name": "2026.11",
+      "classifications": [
+        "ssc-debricked"
+      ],
+      "scan_id": 77012,
+      "rule_id": "C1D2E3F4-0000-1111-2222-333344445555",
+      "finding_domain": "SCA",
+      "source_scan_type": "OpenSource",
+      "analyzer_name": "dataflow",
+      "fortify_aviator": null,
+      "aviator_remediation_guidance_available": null,
+      "impact": 5.0,
+      "probability": 4.0,
+      "confidence": 5.0,
+      "category": "SQL Injection",
+      "severity": "High",
+      "source_status": "Existing",
+      "developer_status": null,
+      "auditor_status": "Remediation Required",
+      "suppressed": false,
+      "exploited": null,
+      "malware": null,
+      "introduced_date": "2026-09-14T10:22:31",
+      "closed_date": null,
+      "last_modified_date": "2026-11-01T15:40:12",
+      "sca_provider": null,
+      "component_name": null,
+      "component_version": null,
+      "component_purl": null,
+      "advisory_ids": [],
+      "summary": "User input reaches a SQL query without validation.",
+      "explanation": "Constructing a dynamic SQL statement with input from an untrusted source might allow an attacker to modify the statement's meaning.",
+      "recommendation": "Use parameterized queries.",
+      "file_path": "src/main/java/com/example/OrderDao.java",
+      "line": 88,
+      "traces": [
+        {
+          "file_path": "src/main/java/com/example/OrderController.java",
+          "line": 42,
+          "message": "getParameter(return)"
+        },
+        {
+          "file_path": "src/main/java/com/example/OrderDao.java",
+          "line": 88,
+          "message": "executeQuery(0)"
+        }
+      ],
+      "source_revision": 3
+    },
+    {
+      "source_finding_id": "3002",
+      "instance_id": "8F1C2B3A4D5E6F708192A3B4C5D6E7F8",
+      "source_url": "https://ams.fortify.com/Redirect/Issues/a3c9e1f2-5b7d-4e8a-9c0b-1d2e3f4a5b6c",
+      "application_id": 501,
+      "application_name": "Payments",
+      "ai_application_type": null,
+      "release_id": 1001,
+      "release_name": "2026.11",
+      "classifications": [
+        "ssc-correlated"
+      ],
+      "scan_id": 77012,
+      "rule_id": "C1D2E3F4-0000-1111-2222-333344445555",
+      "finding_domain": "DAST",
+      "source_scan_type": "Dynamic",
+      "analyzer_name": "dataflow",
+      "fortify_aviator": null,
+      "aviator_remediation_guidance_available": null,
+      "impact": 5.0,
+      "probability": 4.0,
+      "confidence": 5.0,
+      "category": "SQL Injection",
+      "severity": "High",
+      "source_status": "Existing",
+      "developer_status": null,
+      "auditor_status": "Remediation Required",
+      "suppressed": false,
+      "exploited": null,
+      "malware": null,
+      "introduced_date": "2026-09-14T10:22:31",
+      "closed_date": null,
+      "last_modified_date": "2026-11-01T15:40:12",
+      "sca_provider": null,
+      "component_name": null,
+      "component_version": null,
+      "component_purl": null,
+      "advisory_ids": [],
+      "summary": "User input reaches a SQL query without validation.",
+      "explanation": "Constructing a dynamic SQL statement with input from an untrusted source might allow an attacker to modify the statement's meaning.",
+      "recommendation": "Use parameterized queries.",
+      "file_path": "src/main/java/com/example/OrderDao.java",
+      "line": 88,
+      "traces": [
+        {
+          "file_path": "src/main/java/com/example/OrderController.java",
+          "line": 42,
+          "message": "getParameter(return)"
+        },
+        {
+          "file_path": "src/main/java/com/example/OrderDao.java",
+          "line": 88,
+          "message": "executeQuery(0)"
+        }
+      ],
+      "source_revision": 3
+    },
+    {
+      "source_finding_id": "3003",
+      "instance_id": "8F1C2B3A4D5E6F708192A3B4C5D6E7F8",
+      "source_url": "https://ams.fortify.com/Redirect/Issues/a3c9e1f2-5b7d-4e8a-9c0b-1d2e3f4a5b6c",
+      "application_id": 501,
+      "application_name": "Payments",
+      "ai_application_type": null,
+      "release_id": 1001,
+      "release_name": "2026.11",
+      "classifications": [],
+      "scan_id": 77012,
+      "rule_id": "C1D2E3F4-0000-1111-2222-333344445555",
+      "finding_domain": "SAST",
+      "source_scan_type": "Static",
+      "analyzer_name": "dataflow",
+      "fortify_aviator": null,
+      "aviator_remediation_guidance_available": null,
+      "impact": 5.0,
+      "probability": 4.0,
+      "confidence": 5.0,
+      "category": "SQL Injection",
+      "severity": "Low",
+      "source_status": "UPDATED",
+      "developer_status": null,
+      "auditor_status": "Remediation Required",
+      "suppressed": false,
+      "exploited": null,
+      "malware": null,
+      "introduced_date": "2026-09-14T10:22:31",
+      "closed_date": null,
+      "last_modified_date": "2026-11-01T15:40:12",
+      "sca_provider": null,
+      "component_name": null,
+      "component_version": null,
+      "component_purl": null,
+      "advisory_ids": [],
+      "summary": "User input reaches a SQL query without validation.",
+      "explanation": "Constructing a dynamic SQL statement with input from an untrusted source might allow an attacker to modify the statement's meaning.",
+      "recommendation": "Use parameterized queries.",
+      "file_path": "src/main/java/com/example/OrderDao.java",
+      "line": 88,
+      "traces": [
+        {
+          "file_path": "src/main/java/com/example/OrderController.java",
+          "line": 42,
+          "message": "getParameter(return)"
+        },
+        {
+          "file_path": "src/main/java/com/example/OrderDao.java",
+          "line": 88,
+          "message": "executeQuery(0)"
+        }
+      ],
+      "source_revision": 3
+    }
+  ]
+}

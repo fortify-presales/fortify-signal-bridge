@@ -1,0 +1,5 @@
+# Debricked open-source evidence. This is not an exploited or malware verdict.
+id: ssc-debricked
+version: 1
+title: Debricked open source finding
+issue_query: engineType == 'DEBRICKED'

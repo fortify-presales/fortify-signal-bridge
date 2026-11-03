@@ -32,7 +32,7 @@ def check_query(name, value, source):
     return query
 
 
-def load_classifiers(dirs):
+def load_classifiers(dirs, platform):
     found = {}
     for directory in dirs:
         for path in sorted(glob.glob(os.path.join(directory, "*.yaml")) + glob.glob(os.path.join(directory, "*.yml"))):
@@ -56,11 +56,13 @@ def load_classifiers(dirs):
             scan_types = doc.get("scan_types") or []
             if not isinstance(scan_types, list) or any(s not in SCAN_TYPES for s in scan_types):
                 fail(f"{path}: scan_types must be a list of {sorted(SCAN_TYPES)}")
+            if platform == "ssc" and scan_types:
+                fail(f"{path}: SSC classifiers must not set scan_types; filter engineType in issue_query")
             issue_query = check_query("issue_query", doc.get("issue_query"), path)
             app_query = doc.get("application_query")
             if app_query is not None:
                 app_query = check_query("application_query", app_query, path)
-            if scan_types:
+            if scan_types and platform != "ssc":
                 native = ",".join("'" + SCAN_TYPES[s] + "'" for s in scan_types)
                 issue_query = "{" + native + "}.contains(scantype) && (" + issue_query + ")"
             if cid in found:
@@ -89,7 +91,13 @@ def attributes_query(spec):
 
 
 def main():
-    builtin_dir = os.path.join(os.environ.get("COLLECTOR_HOME", "/opt/collector"), "classifiers")
+    platform = os.environ.get("FORTIFY_PLATFORM", "fod").strip() or "fod"
+    if platform not in ("fod", "ssc"):
+        fail("FORTIFY_PLATFORM must be fod or ssc")
+    # Built-ins are classifiers/<platform>/ so each product (fod, ssc, and later ones) is its own directory.
+    builtin_dir = os.path.join(os.environ.get("COLLECTOR_HOME", "/opt/collector"), "classifiers", platform)
+    if not os.path.isdir(builtin_dir):
+        fail(f"No built-in classifiers for platform '{platform}' ({builtin_dir})")
     custom_dir = os.environ.get("CLASSIFIERS_DIR", "")
     selection = os.environ.get("CLASSIFIERS", "all").strip()
     mode = os.environ.get("CLASSIFIER_MODE", "tag").strip()
@@ -99,7 +107,7 @@ def main():
     if custom_dir and not os.path.isdir(custom_dir):
         fail(f"CLASSIFIERS_DIR {custom_dir} is not a directory")
 
-    available = load_classifiers(dirs)
+    available = load_classifiers(dirs, platform)
     if selection in ("", "none"):
         enabled = []
     elif selection == "all":

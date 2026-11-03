@@ -1,0 +1,18 @@
+id: ssc-correlated
+version: "1"
+description: Emit high or critical SSC findings the product has marked as correlated.
+enabled: true
+platforms: [ssc]
+when:
+  all:
+    - classification: ssc-correlated
+      equals: true
+    - field: finding.severity
+      in: [Critical, High]
+    - field: finding.suppressed
+      equals: false
+emit:
+  type: ssc-correlated-high
+  confidence: medium
+  severity_from: finding.severity
+  title: Correlated high-severity SSC finding

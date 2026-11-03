@@ -1,0 +1,18 @@
+id: fod-aviator-sast-true-positive
+version: "1"
+description: Emit confirmed critical SAST findings identified by Aviator.
+enabled: true
+platforms: [fod]
+when:
+  all:
+    - classification: fod-aviator-sast-true-positive
+      equals: true
+    - field: finding.severity
+      in: [Critical]
+    - field: finding.suppressed
+      equals: false
+emit:
+  type: aviator-confirmed-sast
+  confidence: high
+  severity_from: finding.severity
+  title: Confirmed critical SAST finding
