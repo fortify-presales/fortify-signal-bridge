@@ -1,12 +1,10 @@
-# Aviator audited a DAST finding as requiring remediation in an AI application.
+# Aviator audited a DAST finding as requiring remediation.
 id: fod-aviator-dast-true-positive
 version: 1
-title: Aviator-confirmed DAST finding requiring remediation (AI application)
+title: Aviator-confirmed DAST finding requiring remediation
 scan_types: [Dynamic]
 issue_query: >-
   fortifyAviator == true
   && {'Remediation Required','Required Remediation'}.contains(auditorStatus)
-#  && (checkId == null || !(checkId.startsWith('agentic/') || checkId.startsWith('prompt-injection/')))
 application_query: >-
   businessCriticalityType == 'High'
-#  && attributes.?[name == 'AI Application Type' && {'LLM Application','AI Agent'}.contains(value)].size() == 1

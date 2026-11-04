@@ -128,15 +128,7 @@ application_query: >-           # optional SpEL over the owning application reco
 
 Built-in classifiers live in `classifiers/<platform>/`. A run loads only the directory for `FORTIFY_PLATFORM`. FoD is [classifiers/fod/](classifiers/fod/); SSC is [classifiers/ssc/](classifiers/ssc/). A later product, such as Sonatype, is another directory next to those. Custom files mounted with `CLASSIFIERS_DIR` stay a flat overlay and override a built-in with the same id.
 
-FoD ([classifiers/fod/](classifiers/fod/)):
-
-| Id | Matches |
-|---|---|
-| `fod-aviator-sast-true-positive` | Static, `fortifyAviator == true`, auditor status Remediation Required, excluding `agentic/` and `prompt-injection/` rules, in applications whose `AI Application Type` is `LLM Application` or `AI Agent`. |
-| `fod-aviator-dast-true-positive` | Same for Dynamic findings. |
-| `fod-aviator-guidance-available` | `aviatorRemediationGuidanceAvailable == true`, any scan type. |
-| `fod-oss-malware` | Open source findings with FoD `malware == true`. |
-| `fod-oss-exploited` | Open source findings with FoD `exploited == true`. |
+See the [classifier catalog](classifiers/README.md) for the current FoD and SSC classifier predicates and their interpretation.
 
 Mount custom classifiers read-only and point `CLASSIFIERS_DIR` at them:
 

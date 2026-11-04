@@ -1,0 +1,16 @@
+# Tags Static findings whose FoD category is in the AI/agentic risk allowlist.
+# This is category-based and does not identify the scan tool that reported an issue.
+id: fod-ai-agentic-risk-categories
+version: 1
+title: Static findings in AI/agentic risk categories
+scan_types: [Static]
+issue_query: >-
+  {'Anthropic Misconfiguration','Data Poisoning','Excessive Agency','Insecure Tool Calling',
+  'MCP Misconfiguration','OpenAI Misconfiguration','Prompt Injection','System Prompt Leakage',
+  'LLM Misconfiguration','Unbounded Consumption Misconfiguration','Cross-Site Scripting: AI',
+  'Cross-Site Scripting: DOM AI','Prompt Injection: Jailbreak Attempts',
+  'Prompt Injection: Assistant Prompt'}.contains(category)
+application_query: >-
+  businessCriticalityType == 'High'
+# The commented-out predicate checks for AI application types, but it is not active.
+#  && attributes.?[name == 'AI Application Type' && {'LLM Application','AI Agent'}.contains(value)].size() == 1
